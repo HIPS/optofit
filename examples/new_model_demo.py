@@ -91,7 +91,7 @@ stim_pattern = PeriodicStepStimulusPattern(stim_on, stim_off, stim_on_dur, stim_
 stim = DirectCompartmentIrradiance(true_model.population.neurons[0].compartments[0], stim_pattern)
 # Set the recording duration
 t_start = 0
-t_stop = 2*1000.
+t_stop = 100.
 dt = 0.01
 t = np.arange(t_start, t_stop, dt)
 
@@ -111,8 +111,6 @@ for e in range(N_experiments):
 
     # Condition on the observed voltage
     inferred_model.add_data_sequence(inf_data_sequence)
-
-import ipdb; ipdb.set_trace()
 
 # Specify whether to plot the true and observed voltage
 # seq_to_plot = 0
