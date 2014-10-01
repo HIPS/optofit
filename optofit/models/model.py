@@ -4,15 +4,15 @@ and getters and setters for the parameters of the model.
 Also includes hyperparameters
 """
 from parameters import Parameter
-from pybiophys.inference.distributions import *
-from pybiophys.neuron.channels import *
-from pybiophys.simulation.stimulus import Stimulus
+from optofit.inference.distributions import *
+from optofit.neuron.channels import *
+from optofit.simulation.stimulus import Stimulus
 from collections import defaultdict
-from pybiophys.population.population import Population
-from pybiophys.neuron.neuron import Neuron
-from pybiophys.neuron.compartment import CalciumCompartment
-from pybiophys.neuron.channels import *
-from pybiophys.observation.observable import NewDirectCompartmentVoltage, LowPassCompartmentVoltage, IndependentObservations, LinearFluorescence
+from optofit.population.population import Population
+from optofit.neuron.neuron import Neuron
+from optofit.neuron.compartment import CalciumCompartment
+from optofit.neuron.channels import *
+from optofit.observation.observable import NewDirectCompartmentVoltage, LowPassCompartmentVoltage, IndependentObservations, LinearFluorescence
 
 
 class Model(object):

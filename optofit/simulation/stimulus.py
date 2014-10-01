@@ -4,7 +4,7 @@ Define a few canonical stimuli
 """
 import numpy as np
 
-from pybiophys.utils.utils import get_item_at_path
+from optofit.utils.utils import get_item_at_path
 
 class StimulusPattern(object):
     """

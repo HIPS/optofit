@@ -32,7 +32,7 @@ Scott Linderman
 5.4.2014
 """
 import numpy as np
-from pybiophys.models.component import Component
+from optofit.models.component import Component
 
 class Neuron(Component):
 

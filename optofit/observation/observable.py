@@ -17,11 +17,11 @@ us a new compartment which has Voltage as a latent and state
 """
 
 import numpy as np
-from pybiophys.utils import utils
-from pybiophys.models.component import Component
-from pybiophys.models.parameters import Parameter
-from pybiophys.models.hyperparameters import hypers
-from pybiophys.inference.distributions import GaussianDistribution, InverseGammaDistribution
+from optofit.utils import utils
+from optofit.models.component import Component
+from optofit.models.parameters import Parameter
+from optofit.models.hyperparameters import hypers
+from optofit.inference.distributions import GaussianDistribution, InverseGammaDistribution
 
 class Observation(Component):
     """

@@ -5,10 +5,10 @@ import numpy as np
 from hips.inference.ars import adaptive_rejection_sample
 from hips.inference.hmc import hmc
 
-from pybiophys.inference.particle_mcmc import *
-from pybiophys.inference.distributions import *
-from pybiophys.utils.utils import get_item_at_path, as_matrix, as_sarray, sz_dtype
-from pybiophys.models.hyperparameters import hypers
+from optofit.inference.particle_mcmc import *
+from optofit.inference.distributions import *
+from optofit.utils.utils import get_item_at_path, as_matrix, as_sarray, sz_dtype
+from optofit.models.hyperparameters import hypers
 
 import pdb
 
@@ -577,7 +577,7 @@ class GewekeUpdate(MetropolisHastingsUpdate):
         self.t = model.data_sequences[0].t
         self.stim = model.data_sequences[0].stimuli
 
-        from pybiophys.simulation.simulate import simulate
+        from optofit.simulation.simulate import simulate
 
         model.data_sequences[0] = simulate(model, self.t, self.stim)
 
@@ -590,7 +590,7 @@ def initialize_updates(model, geweke=False):
     :return: a list of updates
     """
     # Import the components that we reference
-    from pybiophys.observation.observable import NewDirectCompartmentVoltage, LinearFluorescence
+    from optofit.observation.observable import NewDirectCompartmentVoltage, LinearFluorescence
 
     # Make a list of updates
     updates = []

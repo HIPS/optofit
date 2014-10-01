@@ -1,8 +1,8 @@
 from model import *
-from pybiophys.neuron.neuron          import Neuron
-from pybiophys.observation.observable import VectorObserver
-from pybiophys.utils                  import utils
-from pybiophys.plotting.plotting      import plot_latent_state
+from optofit.neuron.neuron          import Neuron
+from optofit.observation.observable import VectorObserver
+from optofit.utils                  import utils
+from optofit.plotting.plotting      import plot_latent_state
 import matplotlib.pyplot              as     plt
 from scipy.integrate                  import odeint
 

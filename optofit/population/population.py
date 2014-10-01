@@ -3,7 +3,7 @@ Placeholder for future container that implements connectivity among populations
 of neurons.
 """
 import numpy as np
-from pybiophys.models.component import Component
+from optofit.models.component import Component
 
 class Population(Component):
     """

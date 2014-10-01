@@ -4,7 +4,7 @@ A parameter needs a name, a default value, a getter, and a setter.
 It may, optionally have a lower and upper bound
 """
 import numpy as np
-from pybiophys.inference.distributions import DeltaFunction
+from optofit.inference.distributions import DeltaFunction
 
 class Parameter(object):
     _name = "Parameter"

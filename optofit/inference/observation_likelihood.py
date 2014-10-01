@@ -1,7 +1,7 @@
 import numpy as np
-from pybiophys.simulation.simulate import simulate
-#from pybiophys.models.model        import point_parameter_model
-from pybiophys.test.data_utilities import model_dict_to_model
+from optofit.simulation.simulate import simulate
+#from optofit.models.model        import point_parameter_model
+from optofit.test.data_utilities import model_dict_to_model
 
 def mean_squared_error(true_model, compare_model):
     #model = model_dict_to_model(compare_model)

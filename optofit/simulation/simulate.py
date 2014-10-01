@@ -3,11 +3,11 @@ Simulate a neuron with hodgkin huxley dynamics
 """
 import numpy as np
 
-from pybiophys.simulation.stimulus import *
-from pybiophys.models.model import DataSequence
-from pybiophys.utils.utils import as_sarray
-from pybiophys.models.hyperparameters import hypers
-from pybiophys.inference.distributions import TruncatedGaussianDistribution
+from optofit.simulation.stimulus import *
+from optofit.models.model import DataSequence
+from optofit.utils.utils import as_sarray
+from optofit.models.hyperparameters import hypers
+from optofit.inference.distributions import TruncatedGaussianDistribution
 
 def simulate(model, t, stimuli, name=None, have_noise=True, I=None):
     """

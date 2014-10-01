@@ -1,12 +1,12 @@
-from pybiophys.models.model import Model
-from pybiophys.neuron.neuron import Neuron
-from pybiophys.neuron.compartment import CalciumCompartment
-from pybiophys.population.population import Population
-from pybiophys.test.data_utilities import model_dict_to_model
-from pybiophys.observation.observable import IndependentObservations, LowPassCompartmentVoltage
-from pybiophys.neuron.channels import LeakChannel, Ca3KdrChannel, Ca3KaChannel, Ca3NaChannel, Ca3CaChannel, Ca3KahpChannel, Ca3KcChannel, ChR2Channel
-from pybiophys.models.parameters import Parameter
-from pybiophys.inference.observation_likelihood import mean_squared_error
+from optofit.models.model import Model
+from optofit.neuron.neuron import Neuron
+from optofit.neuron.compartment import CalciumCompartment
+from optofit.population.population import Population
+from optofit.test.data_utilities import model_dict_to_model
+from optofit.observation.observable import IndependentObservations, LowPassCompartmentVoltage
+from optofit.neuron.channels import LeakChannel, Ca3KdrChannel, Ca3KaChannel, Ca3NaChannel, Ca3CaChannel, Ca3KahpChannel, Ca3KcChannel, ChR2Channel
+from optofit.models.parameters import Parameter
+from optofit.inference.observation_likelihood import mean_squared_error
 import pickle
 import numpy as np
 

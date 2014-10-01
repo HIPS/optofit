@@ -6,16 +6,16 @@ np.random.seed(seed)
 
 import matplotlib.pyplot as plt
 
-from pybiophys.models.model import Model
-from pybiophys.population.population import Population
-from pybiophys.neuron.neuron import Neuron
-from pybiophys.neuron.compartment import Compartment, CalciumCompartment
-from pybiophys.neuron.channels import *
-from pybiophys.simulation.stimulus import PeriodicStepStimulusPattern, DirectCompartmentCurrentInjection, DirectCompartmentIrradiance
-from pybiophys.simulation.simulate import simulate
-from pybiophys.observation.observable import NewDirectCompartmentVoltage, LowPassCompartmentVoltage, IndependentObservations, LinearFluorescence
-from pybiophys.plotting.plotting import plot_latent_compartment_state, plot_latent_compartment_V_and_I
-from pybiophys.inference.fitting import fit_mcmc
+from optofit.models.model import Model
+from optofit.population.population import Population
+from optofit.neuron.neuron import Neuron
+from optofit.neuron.compartment import Compartment, CalciumCompartment
+from optofit.neuron.channels import *
+from optofit.simulation.stimulus import PeriodicStepStimulusPattern, DirectCompartmentCurrentInjection, DirectCompartmentIrradiance
+from optofit.simulation.simulate import simulate
+from optofit.observation.observable import NewDirectCompartmentVoltage, LowPassCompartmentVoltage, IndependentObservations, LinearFluorescence
+from optofit.plotting.plotting import plot_latent_compartment_state, plot_latent_compartment_V_and_I
+from optofit.inference.fitting import fit_mcmc
 
 
 def make_model():

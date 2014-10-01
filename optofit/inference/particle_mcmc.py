@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.misc import logsumexp
 
-from pybiophys.utils.utils import ibincount, as_matrix, as_sarray
+from optofit.utils.utils import ibincount, as_matrix, as_sarray
 
 # TODO: Move the proposals, likelihoods, etc to a separate Python package
 # since it is shared among multiple projects now

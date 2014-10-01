@@ -1,8 +1,8 @@
 """
 General code for plotting the state of the neuron
 """
-from pybiophys.utils.utils import extract_names_from_dtype, get_item_at_path, sz_dtype, as_matrix
-from pybiophys.observation.observable import *
+from optofit.utils.utils import extract_names_from_dtype, get_item_at_path, sz_dtype, as_matrix
+from optofit.observation.observable import *
 import matplotlib.pyplot as plt
 import numpy as np
 

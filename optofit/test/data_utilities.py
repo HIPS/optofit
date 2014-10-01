@@ -2,10 +2,10 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import gamma
-from pybiophys.models.hyperparameters import hypers
-from pybiophys.models.model import point_parameter_model, DataSequence
-from pybiophys.neuron.channels       import *
-from pybiophys.observation.observable import NewDirectCompartmentVoltage, LowPassCompartmentVoltage, IndependentObservations, LinearFluorescence
+from optofit.models.hyperparameters import hypers
+from optofit.models.model import point_parameter_model, DataSequence
+from optofit.neuron.channels       import *
+from optofit.observation.observable import NewDirectCompartmentVoltage, LowPassCompartmentVoltage, IndependentObservations, LinearFluorescence
 
 def pickle_model(model, filename):
     pickle.dump(model_to_dict(model), open(filename, 'w'))

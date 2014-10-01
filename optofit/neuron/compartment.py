@@ -4,10 +4,10 @@ Base class for a neuron. A neuron consists of a set of compartments, each of whi
 """
 import numpy as np
 
-from pybiophys.models.component import Component
-from pybiophys.models.hyperparameters import hypers
+from optofit.models.component import Component
+from optofit.models.hyperparameters import hypers
 
-from pybiophys.utils.utils import get_item_at_path
+from optofit.utils.utils import get_item_at_path
 
 def make_compartment(neuron, model):
     """

@@ -46,8 +46,8 @@ def sample_model():
 
     # Set the recording duration
     t_start = 0
-    t_stop = 1000.
-    dt = 0.1
+    t_stop = 100.
+    dt = 0.01
     t = np.arange(t_start, t_stop, dt)
     T = len(t)
 
@@ -64,7 +64,7 @@ def sample_model():
     # Set the proposal distribution using Hodgkin Huxley dynamics
     # TODO: Fix the hack which requires us to know the number of particles
     N = 100
-    sigmas = 0.000*np.ones(D)
+    sigmas = 0.0001*np.ones(D)
     # Set the voltage transition dynamics to be a bit noisier
     sigmas[squid_body.x_offset] = 0.25
     prop = HodgkinHuxleyProposal(T, N, D, squid_body,  sigmas, t, inpt)
@@ -94,7 +94,7 @@ def sample_model():
     z = z[:,0,:].copy(order='C')
 
     # Plot the first particle trajectory
-    # plt.ion()
+    plt.ion()
     fig = plt.figure()
     # fig.add_subplot(111, aspect='equal')
     plt.plot(t, z[:,observed_dims[0]], 'k')

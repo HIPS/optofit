@@ -5,8 +5,8 @@ import copy
 import numpy as np
 
 from mcmc_transitions import initialize_updates
-from pybiophys.simulation.simulate import simulate
-from pybiophys.utils.utils import as_matrix
+from optofit.simulation.simulate import simulate
+from optofit.utils.utils import as_matrix
 
 def fit_mcmc(model, N_samples=1000, callback=None, print_interval=1, geweke=False):
     """
