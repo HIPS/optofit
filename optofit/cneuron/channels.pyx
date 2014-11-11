@@ -197,3 +197,65 @@ cdef class KdrChannel(Channel):
 
 
         return dxdt
+
+cdef inline double sigma(double z): 1./(1+np.exp(-z))
+
+cdef class GPChannel(Channel):
+    """
+    Generic channel with a Gaussian process dyamics function
+    """
+    def __init__(self, name=None, hypers=None):
+        super(GPChannel, self).__init__(name=name)
+
+        # Specify the number of parameters
+        self.n_x = 1
+
+        # Set the hyperparameters
+        self.g = hypers['g_kdr']
+        self.E = hypers['E_kdr']
+
+        # TODO: Create a GP Object for the dynamics model
+
+    def steady_state(self, x0):
+        V = x0[self.parent_compartment.x_offset]
+
+        # TODO: Set the steady state
+        x0[self.x_offset] = 0
+
+    cpdef double current(self, double[:,:,::1] x, double V, int t, int n):
+        """
+        Evaluate the instantaneous current through this channel
+        """
+        cdef double z = x[t,n,self.x_offset]
+        return sigma(z) * (V - self.E)
+
+    cpdef kinetics(self, double[:,:,::1] dxdt, double[:,:,::1] x, double[:,::1] inpt, int[::1] ts):
+        cdef int T = x.shape[0]
+        cdef int N = x.shape[1]
+        cdef int D = x.shape[2]
+        cdef int M = inpt.shape[1]
+        cdef int S = ts.shape[0]
+        cdef int n, s, t
+        cdef double an1, bn1
+
+        # Get a pointer to the voltage of the parent compartment
+        # TODO: This approach sucks b/c it assumes the voltage
+        # is the first compartment state. It should be faster than
+        # calling back into the parent to have it extract the voltage
+        # for us though.
+        # cdef double[:,:] V = x[:,:,self.parent_compartment.x_offset]
+        # cdef double[:,:] nn = x[:,:,self.x_offset+0]
+
+        cdef double V, z
+
+        with nogil:
+            for s in prange(S):
+                t = ts[s]
+                for n in prange(N):
+                    V = x[t,n,self.parent_compartment.x_offset]
+                    z = x[t,n,self.x_offset]
+
+                    # TODO: Sample from the GP kinetics model
+                    dxdt[t,n,self.x_offset] = 0
+
+        return dxdt

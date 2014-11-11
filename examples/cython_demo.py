@@ -100,6 +100,7 @@ def sample_model():
     plt.plot(t, z[:,observed_dims[0]], 'k')
     plt.plot(t, x[:,0],  'r')
     plt.show()
+    plt.pause(0.01)
 
     return t, z, x, init, prop, lkhd
 
@@ -115,13 +116,16 @@ def sample_z_given_x(t, z_curr, x,
     pf = ParticleGibbsAncestorSampling(T, N_particles, D)
     pf.initialize(init, prop, lkhd, x, z_curr)
 
-    S = 10
+    S = 100
     z_smpls = np.zeros((S,T,D))
+    l = plt.plot(t, z_smpls[0,:,0], 'b')
     for s in range(S):
         print "Iteration %d" % s
         # Reinitialize with the previous particle
         pf.initialize(init, prop, lkhd, x, z_smpls[s,:,:])
         z_smpls[s,:,:] = pf.sample()
+        l[0].set_data(t, z_smpls[s,:,0])
+        plt.pause(0.01)
 
     z_mean = z_smpls.mean(axis=0)
     z_std = z_smpls.std(axis=0)

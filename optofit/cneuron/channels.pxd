@@ -23,3 +23,6 @@ cdef class NaChannel(Channel):
 
 cdef class KdrChannel(Channel):
     pass
+
+cdef class GpChannel(Channel)
+    pass
