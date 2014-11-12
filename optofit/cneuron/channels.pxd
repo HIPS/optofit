@@ -1,5 +1,8 @@
 from cython.parallel cimport prange
 
+import numpy as np
+cimport numpy as np
+
 from component cimport Component
 from compartment cimport Compartment
 
@@ -24,5 +27,5 @@ cdef class NaChannel(Channel):
 cdef class KdrChannel(Channel):
     pass
 
-cdef class GpChannel(Channel)
+cdef class GpChannel(Channel):
     pass
