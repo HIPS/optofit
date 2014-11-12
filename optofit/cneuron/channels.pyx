@@ -9,7 +9,10 @@ from cython.parallel cimport prange
 from component cimport Component
 from compartment cimport Compartment
 
-from libc.math cimport exp
+import numpy as np
+cimport numpy as np
+
+import GPy
 
 cdef class Channel(Component):
     """
@@ -198,8 +201,6 @@ cdef class KdrChannel(Channel):
 
         return dxdt
 
-cdef inline double sigma(double z): 1./(1+np.exp(-z))
-cdef inline double sigma_inv(double u): np.log(u./(1-u))
 
 cdef class GPChannel(Channel):
     """
@@ -215,39 +216,54 @@ cdef class GPChannel(Channel):
         self.g = hypers['g_kdr']
         self.E = hypers['E_kdr']
 
+        # Import stuff
+        import GPy
+        import itertools
+        import numpy as np
+
         # Create a GP Object for the dynamics model
         # This is a function Z x V -> dZ, i.e. a 2D
         # Gaussian process regression.
-        import GPy
         # Lay out a grid of inducing points for a sparse GP
-        import itertools
-        z_min = sigmainv(0.005)
-        z_max = sigmainv(0.995)
-        V_min = -65
-        V_max = 120
+
+        print self.g
+        self.grid = 10
+        #self.z_min = sigma_inv(0.005)
+        #self.z_max = sigma_inv(0.995)
+        self.z_min = -6.0
+        self.z_max = 6.0
+        self.V_min = -65.
+        self.V_max = 120.
         self.Z = np.array(list(
-                      itertools.product(*([np.linspace(z_min, z_max, 10) for _ in range(self.n_x)]
-                                        + [np.linspace(V_min, V_max, 10)]))))
+                      itertools.product(*([np.linspace(self.z_min, self.z_max, self.grid) for _ in range(self.n_x)]
+                                        + [np.linspace(self.V_min, self.V_max, self.grid)]))))
 
         # Create independent RBF kernels over Z and V
         kernel_z_hyps = { 'input_dim' : 1,
                           'variance' : 1,
-                          'lengthscale' : (z_max-z_min)/4.}
+                          'lengthscale' : (self.z_max-self.z_min)/4.}
 
         self.kernel_z = GPy.kern.rbf(**kernel_z_hyps)
         for n in range(1, self.n_x):
             self.kernel_z = self.kernel_z.prod(GPy.kern.rbf(kernel_z_hyps))
+        print self.kernel_z
 
         kernel_V_hyps = { 'input_dim' : 1,
                           'variance' : 1,
-                          'lengthscale' : (V_max-V_min)/4.}
-        self.kernel_V = GPy.kern.rbf(kernel_V_hyps)
+                          'lengthscale' : (self.V_max-self.V_min)/4.}
+        self.kernel_V = GPy.kern.rbf(**kernel_V_hyps)
+        print self.kernel_V
+
+        # Combine the kernel for z and V
         self.kernel = self.kernel_z.prod(self.kernel_V, tensor=True)
+        print self.kernel_V
 
         # Initialize with a random sample from the prior
-        m = np.zeros(Z.shape[0])
-        C = self.kernel.K(Z)
-        self.h = np.random.multivariate_normal(m, C, 1)
+        m = np.zeros(self.Z.shape[0])
+        C = self.kernel.K(self.Z)
+        print m
+        print C
+        self.h = np.random.multivariate_normal(m, C, 1).T
 
         # # Instatiate a sparse GP regression model
         # self.gp = GPy.models.SparseGPRegression(np.zeros((1, self.n_x+1)),
@@ -296,20 +312,19 @@ cdef class GPChannel(Channel):
 
         cdef double V, z
 
-        with nogil:
-            for s in prange(S):
-                t = ts[s]
-                for n in prange(N):
-                    V = x[t,n,self.parent_compartment.x_offset]
-                    z = x[t,n,self.x_offset]
+        for s in range(S):
+            t = ts[s]
+            for n in range(N):
+                V = x[t,n,self.parent_compartment.x_offset]
+                z = x[t,n,self.x_offset]
 
-                    # Sample from the GP kinetics model
-                    m_pred, v_pred, _, _ = self.gp.predict(np.array([[z,V]]))
-                    dxdt[t,n,self.x_offset] = m_pred[0]
+                # Sample from the GP kinetics model
+                m_pred, v_pred, _, _ = self.gp.predict(np.array([[z,V]]))
+                dxdt[t,n,self.x_offset] = m_pred[0]
 
         return dxdt
 
-    cpdef resample(data=[]):
+    def resample(self, data=[]):
         """
         Resample the dynamics function given a list of inferred voltage and state trajectories
         """
@@ -320,17 +335,24 @@ cdef class GPChannel(Channel):
             z = d[:,self.x_offset:self.x_offset][:,None]
             v = d[:,self.parent_compartment.x_offset][:,None]
             Xs.append(np.hstack((z[:-1,:],v[:-1,:])))
-            Ys.append(np.hstack((z[1:,:])))
+            Ys.append(np.hstack((z[1:,:] - z[:-1,:])))
 
         X = np.vstack(Xs)
         Y = np.vstack(Ys)
 
         # Set up the sparse GP regression model with the sampled inputs and outputs
-        gpr = GPy.models.SparseGPRegression(X, Y, self.kernel, Z=Z)
+        gpr = GPy.models.SparseGPRegression(X, Y, self.kernel, Z=self.Z)
 
         # HACK: Rather than using a truly nonparametric approach, just sample
         # the GP at the grid of inducing points and interpolate at the GP mean
-        self.h = gpr.posterior_samples(Z, size=1)
+        self.h = gpr.posterior_samples(self.Z, size=1)
 
         # HACK: Recreate the GP with the sampled function h
-        self.gp = GPy.models.SparseGPRegression(Z, h, self.kernel, Z=Z)
+        self.gp = GPy.models.SparseGPRegression(self.Z, self.h, self.kernel, Z=self.Z)
+
+    def plot(self):
+        import matplotlib.pyplot as plt
+        h2 = self.h.reshape((self.grid,self.grid))
+        plt.imshow(h2, extent=(self.V_min, self.V_max, self.z_max, self.z_min))
+        plt.ioff()
+        plt.show()
