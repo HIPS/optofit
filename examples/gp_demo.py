@@ -100,12 +100,10 @@ def sample_model():
     init = GaussianInitialDistribution(z0, 0.1**2 * np.eye(D))
 
     # Set the proposal distribution using Hodgkin Huxley dynamics
-    # TODO: Fix the hack which requires us to know the number of particles
-    N = 100
     sigmas = 0.0001*np.ones(D)
     # Set the voltage transition dynamics to be a bit noisier
     sigmas[body.x_offset] = 0.25
-    prop = HodgkinHuxleyProposal(T, N, D, body,  sigmas, t, inpt)
+    prop = HodgkinHuxleyProposal(T, 1, D, body,  sigmas, t, inpt)
 
     # Set the observation model to observe only the voltage
     etas = np.ones(1)
@@ -113,7 +111,7 @@ def sample_model():
     lkhd = PartialGaussianLikelihood(observed_dims, etas)
 
     # Initialize the latent state matrix to sample N=1 particle
-    z = np.zeros((T,N,D))
+    z = np.zeros((T,1,D))
     z[0,0,:] = init.sample()
     # Initialize the output matrix
     x = np.zeros((T,D))
@@ -142,39 +140,98 @@ def sample_model():
 
     # Plot the first particle trajectory
     st_axs, _ = plot_state(t, z, I=I_gp, color='k')
+    # Plot the observed voltage
+    st_axs[0].plot(t, x[:,0], 'r')
+
     plt.ion()
     plt.show()
     plt.pause(0.01)
 
-    return t, z, x, init, prop, lkhd, st_axs, gp_ax2
+    return t, z, x, inpt, gp, st_axs, gp_ax2
 
 # Now run the pMCMC inference
-def sample_z_given_x(t, z_curr, x,
-                     init, prop, lkhd,
+def sample_z_given_x(t, x, inpt, gp,
                      N_particles=100,
                      plot=False,
                      axs=None, gp_ax=None):
-    T,D = z_curr.shape
-    T,O = x.shape
-    # import pdb; pdb.set_trace()
-    pf = ParticleGibbsAncestorSampling(T, N_particles, D)
-    pf.initialize(init, prop, lkhd, x, z_curr)
 
+    T,O = x.shape
+
+    # Make a model
+    # Add a few channels
+    body = Compartment(name='body', hypers=hypers)
+    leak = LeakChannel(name='leak', hypers=hypers)
+    gp = GPChannel(name='gp', hypers=hypers)
+
+    body.add_child(leak)
+    body.add_child(gp)
+    # Initialize the model
+    D, I = body.initialize_offsets()
+
+    # Set the initial distribution to be Gaussian around the steady state
+    z0 = np.zeros(D)
+    body.steady_state(z0)
+    init = GaussianInitialDistribution(z0, 0.1**2 * np.eye(D))
+
+    # Set the proposal distribution using Hodgkin Huxley dynamics
+    sigmas = 0.0001*np.ones(D)
+    # Set the voltage transition dynamics to be a bit noisier
+    sigmas[body.x_offset] = 0.25
+    prop = HodgkinHuxleyProposal(T, N_particles, D, body,  sigmas, t, inpt)
+
+    # Set the observation model to observe only the voltage
+    etas = np.ones(1)
+    observed_dims = np.array([body.x_offset]).astype(np.int32)
+    lkhd = PartialGaussianLikelihood(observed_dims, etas)
+
+    # Initialize the latent state matrix to sample N=1 particle
+    z = np.ones((T,N_particles,D)) * z0[None, None, :]
+    z0 = z[:,0,:].copy('C')
+
+    # Prepare the particle Gibbs sampler with the first particle
+    pf = ParticleGibbsAncestorSampling(T, N_particles, D)
+    pf.initialize(init, prop, lkhd, x, z0)
+
+    # Plot the initial state
+    I_gp = gp.current(z, z[:,0,0], np.arange(T), 0)
+    gp_ax, im = gp.plot(ax=gp_ax)
+
+    axs, lines = plot_state(t, z[:,0,:], color='b', I=I_gp, axs=axs)
+
+    # Update figures
+    plt.figure(1)
+    plt.pause(0.001)
+    plt.figure(2)
+    plt.pause(0.001)
+
+
+
+    # Initialize sample outputs
     S = 100
     z_smpls = np.zeros((S,T,D))
-
-    _, lines = plot_state(t, z, color='b', axs=axs)
-    plt.pause(0.001)
 
     for s in range(S):
         print "Iteration %d" % s
         # Reinitialize with the previous particle
         pf.initialize(init, prop, lkhd, x, z_smpls[s,:,:])
-        z_smpls[s,:,:] = pf.sample()
-        # l[0].set_data(t, z_smpls[s,:,0])
-        plot_state(t, z_smpls[s,:,:], lines=lines)
 
-        plt.pause(0.01)
+        # Sample a new trajectory given the updated kinetics and the previous sample
+        z_smpls[s,:,:] = pf.sample()
+
+        # Resample the GP
+        I_gp = gp.current(z_smpls[s,:,:][:,None,:], z_smpls[s,:,0], np.arange(T), 0)
+
+        # Plot the sample
+        plot_state(t, z_smpls[s,:,:], I=I_gp, lines=lines)
+        plt.autoscale()
+
+        gp.plot(im=im)
+
+        # Update figures
+        plt.figure(1)
+        plt.pause(0.001)
+        plt.figure(2)
+        plt.pause(0.001)
 
     z_mean = z_smpls.mean(axis=0)
     z_std = z_smpls.std(axis=0)
@@ -184,8 +241,7 @@ def sample_z_given_x(t, z_curr, x,
     z_env[:,1] = np.concatenate((z_mean[:,0] + z_std[:,0], z_mean[::-1,0] - z_std[::-1,0]))
 
     if plot:
-        plt.gca().add_patch(Polygon(z_env, facecolor='b', alpha=0.25, edgecolor='none'))
-        # plt.plot(t, z_mean[:,0], 'b', lw=1)
+        axs[0].add_patch(Polygon(z_env, facecolor='b', alpha=0.25, edgecolor='none'))
 
         # Compute the current
         plot_state(t, z_mean, axs=axs, color='b')
@@ -194,13 +250,11 @@ def sample_z_given_x(t, z_curr, x,
         # for s in range(10):
         #     si = np.random.randint(S)
         #     plt.plot(t, z_smpls[si,:,0], '-b', lw=0.5)
-
-        plt.ioff()
-        plt.show()
+        plt.pause(0.001)
 
     return z_smpls
 
-t, z, x, init, prop, lkhd, axs, gp_ax = sample_model()
+t, z, x, inpt, gp, axs, gp_ax = sample_model()
 
 raw_input("Press enter to being sampling...\n")
-sample_z_given_x(t, z, x, init, prop, lkhd, plot=True, axs=axs)
+sample_z_given_x(t, x, inpt, gp, plot=True, axs=axs, gp_ax=gp_ax)
