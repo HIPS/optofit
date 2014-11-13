@@ -209,16 +209,19 @@ def sample_z_given_x(t, x, inpt, gp,
     raw_input("Press any key to continue\n")
 
     # Initialize sample outputs
-    S = 1
+    S = 100
     z_smpls = np.zeros((S,T,D))
+    z_smpls[0,:,:] = z0
 
-    for s in range(S):
+
+    for s in range(1,S):
         print "Iteration %d" % s
         # Reinitialize with the previous particle
-        pf.initialize(init, prop, lkhd, x, z_smpls[s,:,:])
+        pf.initialize(init, prop, lkhd, x, z_smpls[s-1,:,:])
 
         # Sample a new trajectory given the updated kinetics and the previous sample
         z_smpls[s,:,:] = pf.sample()
+        # z_smpls[s,:,:] = z_smpls[s-1,:,:]
 
         # Plot the sample
         I_gp = gp.current(z_smpls[s,:,:][:,None,:], z_smpls[s,:,0], np.arange(T), 0)
@@ -230,7 +233,7 @@ def sample_z_given_x(t, x, inpt, gp,
         plt.pause(0.001)
 
         # Resample the GP
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         # raw_input("Press any key to continue\n")
         gp.resample(z_smpls[s,:,:])
         gp.plot(im=im)
