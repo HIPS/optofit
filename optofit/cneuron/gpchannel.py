@@ -7,7 +7,8 @@ from channels import Channel
 from GPy.models import SparseGPRegression
 from GPy.kern import rbf
 
-sigma = lambda x: 1./(1+np.exp(x))
+sigma = lambda x: 1./(1+np.exp(-x))
+sigma_inv = lambda x: np.log(x/(1-x))
 
 class GPChannel(Channel):
     """
@@ -28,8 +29,8 @@ class GPChannel(Channel):
         # Gaussian process regression.
         # Lay out a grid of inducing points for a sparse GP
         self.grid = 10
-        self.z_min = -6.0
-        self.z_max = 6.0
+        self.z_min = sigma_inv(0.005)
+        self.z_max = sigma_inv(0.995)
         self.V_min = -65.
         self.V_max = 120.
         self.Z = np.array(list(
@@ -67,7 +68,7 @@ class GPChannel(Channel):
         V = x0[self.parent_compartment.x_offset]
 
         # TODO: Set the steady state
-        x0[self.x_offset] = 0
+        x0[self.x_offset] = sigma_inv(0.005)
 
     #cpdef double current(self, double[:,:,::1] x, double V, int t, int n):
     def current(self, x, V, t, n):

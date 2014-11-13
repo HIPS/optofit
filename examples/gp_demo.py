@@ -8,7 +8,7 @@ from matplotlib.patches import Polygon
 from optofit.cneuron.compartment import Compartment
 from optofit.cneuron.channels import LeakChannel
 from optofit.cneuron.simulate import forward_euler
-from optofit.cneuron.gpchannel import GPChannel
+from optofit.cneuron.gpchannel import GPChannel, sigma
 
 from hips.inference.particle_mcmc import *
 from optofit.cinference.pmcmc import *
@@ -20,7 +20,7 @@ hypers = {
             'g_leak' : 0.3,
             'E_leak' : -65.0,
             'g_gp'   : 1.0,
-            'E_gp'   : 50.0,
+            'E_gp'   : 0.0,
          }
 
 print "Seed: ", seed
@@ -59,7 +59,7 @@ def sample_model():
 
     # Set the proposal distribution using Hodgkin Huxley dynamics
     # TODO: Fix the hack which requires us to know the number of particles
-    N = 100
+    N = 1
     sigmas = 0.0001*np.ones(D)
     # Set the voltage transition dynamics to be a bit noisier
     sigmas[body.x_offset] = 0.25
@@ -80,22 +80,37 @@ def sample_model():
     for i in np.arange(0,T-1):
         # The interface kinda sucks. We have to tell it that
         # the first particle is always its ancestor
-        print "i=",i
         prop.sample_next(z, i, np.array([0], dtype=np.int32))
 
     # Sample observations
     for i in np.arange(0,T):
         lkhd.sample(z,x,i,0)
 
+    # Extract the GP current
+    I_gp = gp.current(z, z[:,0,0], np.arange(T), 0)
+
     # Extract the first (and in this case only) particle
     z = z[:,0,:].copy(order='C')
+
 
     # Plot the first particle trajectory
     # plt.ion()
     fig = plt.figure()
-    # fig.add_subplot(111, aspect='equal')
-    plt.plot(t, z[:,observed_dims[0]], 'k')
-    plt.plot(t, x[:,0],  'r')
+    ax1 = fig.add_subplot(311)
+    ax1.plot(t, z[:,observed_dims[0]], 'k')
+    ax1.plot(t, x[:,0],  'r')
+    ax1.set_ylabel('V')
+
+    ax2 = fig.add_subplot(312)
+    ax2.plot(t, sigma(z[:,1]), 'k')
+    ax2.set_ylabel('\\sigma(z_1)')
+    ax2.set_ylim((0,1))
+
+    ax3 = fig.add_subplot(313)
+    ax3.plot(t, I_gp, 'k')
+    ax3.set_ylabel('I_{gp}')
+    ax3.set_xlabel('t')
+
     plt.show()
     plt.pause(0.01)
 
