@@ -1,11 +1,4 @@
 import numpy as np
-# Set the random seed for reproducibility
-# seed = np.random.randint(2**16)
-seed = 10312
-print "Seed: ", seed
-np.random.seed(seed)
-
-
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 
@@ -16,6 +9,12 @@ from optofit.cneuron.gpchannel import GPChannel, sigma
 
 from hips.inference.particle_mcmc import *
 from optofit.cinference.pmcmc import *
+
+# Set the random seed for reproducibility
+seed = np.random.randint(2**16)
+seed = 10312
+print "Seed: ", seed
+np.random.seed(seed)
 
 # Make a simple compartment
 hypers = {
