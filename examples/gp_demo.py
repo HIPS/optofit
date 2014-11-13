@@ -26,6 +26,26 @@ hypers = {
 print "Seed: ", seed
 np.random.seed(seed)
 
+def plot_state(z, axs=None, I=None, color='k'):
+    if axs is None:
+        fig = plt.figure()
+        ax1 = fig.add_subplot(311)
+        ax2 = fig.add_subplot(312)
+        ax3 = fig.add_subplot(313)
+
+    # Plot the voltage
+    ax1.plot(t, z[:,0], color=color)
+    # ax1.plot(t, x[:,0],  'r')
+    ax1.set_ylabel('V')
+
+    ax2.plot(t, sigma(z[:,1]), color=color)
+    ax2.set_ylabel('\\sigma(z_1)')
+    ax2.set_ylim((0,1))
+
+    if I is not None:
+        ax3.plot(t, I, color=color)
+        ax3.set_ylabel('I_{gp}')
+        ax3.set_xlabel('t')
 
 def sample_model():
     # Add a few channels
@@ -94,22 +114,23 @@ def sample_model():
 
 
     # Plot the first particle trajectory
-    fig = plt.figure()
-    ax1 = fig.add_subplot(311)
-    ax1.plot(t, z[:,observed_dims[0]], 'k')
-    ax1.plot(t, x[:,0],  'r')
-    ax1.set_ylabel('V')
-
-    ax2 = fig.add_subplot(312)
-    ax2.plot(t, sigma(z[:,1]), 'k')
-    ax2.set_ylabel('\\sigma(z_1)')
-    ax2.set_ylim((0,1))
-
-    ax3 = fig.add_subplot(313)
-    ax3.plot(t, I_gp, 'k')
-    ax3.set_ylabel('I_{gp}')
-    ax3.set_xlabel('t')
-
+    # fig = plt.figure()
+    # ax1 = fig.add_subplot(311)
+    # ax1.plot(t, z[:,observed_dims[0]], 'k')
+    # ax1.plot(t, x[:,0],  'r')
+    # ax1.set_ylabel('V')
+    #
+    # ax2 = fig.add_subplot(312)
+    # ax2.plot(t, sigma(z[:,1]), 'k')
+    # ax2.set_ylabel('\\sigma(z_1)')
+    # ax2.set_ylim((0,1))
+    #
+    # ax3 = fig.add_subplot(313)
+    # ax3.plot(t, I_gp, 'k')
+    # ax3.set_ylabel('I_{gp}')
+    # ax3.set_xlabel('t')
+    plot_state(z, I=I_gp, color='k')
+    plt.ion()
     plt.show()
     plt.pause(0.01)
 
@@ -119,7 +140,8 @@ def sample_model():
 def sample_z_given_x(t, z_curr, x,
                      init, prop, lkhd,
                      N_particles=100,
-                     plot=False):
+                     plot=False,
+                     axs=None):
 
     T,D = z_curr.shape
     T,O = x.shape
@@ -147,8 +169,10 @@ def sample_z_given_x(t, z_curr, x,
 
     if plot:
         plt.gca().add_patch(Polygon(z_env, facecolor='b', alpha=0.25, edgecolor='none'))
-        plt.plot(t, z_mean[:,0], 'b', lw=1)
+        # plt.plot(t, z_mean[:,0], 'b', lw=1)
 
+        # Compute the current
+        plot_state(z_mean, axs=axs, color='b')
 
         # Plot a few random samples
         # for s in range(10):
@@ -161,4 +185,4 @@ def sample_z_given_x(t, z_curr, x,
     return z_smpls
 
 t, z, x, init, prop, lkhd = sample_model()
-# sample_z_given_x(t, z, x, init, prop, lkhd, plot=True)
+sample_z_given_x(t, z, x, init, prop, lkhd, plot=True)
