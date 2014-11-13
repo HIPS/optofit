@@ -1,4 +1,8 @@
 import numpy as np
+seed = np.random.randint(2**16)
+# seed = 10312
+print "Seed: ", seed
+
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 
@@ -11,9 +15,6 @@ from hips.inference.particle_mcmc import *
 from optofit.cinference.pmcmc import *
 
 # Set the random seed for reproducibility
-seed = np.random.randint(2**16)
-seed = 10312
-print "Seed: ", seed
 np.random.seed(seed)
 
 # Make a simple compartment
@@ -26,7 +27,7 @@ hypers = {
             'E_gp'   : 0.0,
          }
 
-def sample_model():
+def create_model():
     # Add a few channels
     body = Compartment(name='body', hypers=hypers)
     leak = LeakChannel(name='leak', hypers=hypers)
@@ -37,6 +38,10 @@ def sample_model():
     # Initialize the model
     D, I = body.initialize_offsets()
 
+    return body, gp, D, I
+
+def sample_model( ):
+    body, gp, D, I = create_model()
     # Set the recording duration
     t_start = 0
     t_stop = 100.
@@ -113,15 +118,7 @@ def sample_z_given_x(t, x, inpt,
     T,O = x.shape
 
     # Make a model
-    # Add a few channels
-    body = Compartment(name='body', hypers=hypers)
-    leak = LeakChannel(name='leak', hypers=hypers)
-    gp = GPChannel(name='gp', hypers=hypers)
-
-    body.add_child(leak)
-    body.add_child(gp)
-    # Initialize the model
-    D, I = body.initialize_offsets()
+    body, gp, D, I = create_model()
 
     # Set the initial distribution to be Gaussian around the steady state
     ss = np.zeros(D)
