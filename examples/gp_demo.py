@@ -77,8 +77,6 @@ def sample_model():
     leak = LeakChannel(name='leak', hypers=hypers)
     gp = GPChannel(name='gp', hypers=hypers)
 
-    gp.plot()
-
     body.add_child(leak)
     body.add_child(gp)
     # Initialize the model
@@ -136,36 +134,26 @@ def sample_model():
     # Extract the first (and in this case only) particle
     z = z[:,0,:].copy(order='C')
 
+    # Plot the GP channel dynamics
+    gp_fig = plt.figure()
+    gp_ax1 = gp_fig.add_subplot(121)
+    gp.plot(ax=gp_ax1)
+    gp_ax2 = gp_fig.add_subplot(122)
 
     # Plot the first particle trajectory
-    # fig = plt.figure()
-    # ax1 = fig.add_subplot(311)
-    # ax1.plot(t, z[:,observed_dims[0]], 'k')
-    # ax1.plot(t, x[:,0],  'r')
-    # ax1.set_ylabel('V')
-    #
-    # ax2 = fig.add_subplot(312)
-    # ax2.plot(t, sigma(z[:,1]), 'k')
-    # ax2.set_ylabel('\\sigma(z_1)')
-    # ax2.set_ylim((0,1))
-    #
-    # ax3 = fig.add_subplot(313)
-    # ax3.plot(t, I_gp, 'k')
-    # ax3.set_ylabel('I_{gp}')
-    # ax3.set_xlabel('t')
-    axs, _ = plot_state(t, z, I=I_gp, color='k')
+    st_axs, _ = plot_state(t, z, I=I_gp, color='k')
     plt.ion()
     plt.show()
     plt.pause(0.01)
 
-    return t, z, x, init, prop, lkhd, axs
+    return t, z, x, init, prop, lkhd, st_axs, gp_ax2
 
 # Now run the pMCMC inference
 def sample_z_given_x(t, z_curr, x,
                      init, prop, lkhd,
                      N_particles=100,
                      plot=False,
-                     axs=None):
+                     axs=None, gp_ax=None):
     T,D = z_curr.shape
     T,O = x.shape
     # import pdb; pdb.set_trace()
@@ -185,6 +173,7 @@ def sample_z_given_x(t, z_curr, x,
         z_smpls[s,:,:] = pf.sample()
         # l[0].set_data(t, z_smpls[s,:,0])
         plot_state(t, z_smpls[s,:,:], lines=lines)
+
         plt.pause(0.01)
 
     z_mean = z_smpls.mean(axis=0)
@@ -211,5 +200,7 @@ def sample_z_given_x(t, z_curr, x,
 
     return z_smpls
 
-t, z, x, init, prop, lkhd, axs = sample_model()
+t, z, x, init, prop, lkhd, axs, gp_ax = sample_model()
+
+raw_input("Press enter to being sampling...\n")
 sample_z_given_x(t, z, x, init, prop, lkhd, plot=True, axs=axs)

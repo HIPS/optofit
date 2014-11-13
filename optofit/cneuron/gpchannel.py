@@ -142,14 +142,29 @@ class GPChannel(Channel):
         # HACK: Recreate the GP with the sampled function h
         self.gp = SparseGPRegression(self.Z, self.h, self.kernel, Z=self.Z)
 
-    def plot(self, cmap=plt.cm.hot):
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
+    def plot(self, ax=None, im=None, cmap=plt.cm.hot):
+
+        # Reshape into a 2D function image
         h2 = self.h.reshape((self.grid,self.grid))
-        ax.imshow(h2, extent=(self.V_min, self.V_max, self.z_max, self.z_min), cmap=cmap)
-        ax.set_aspect((self.V_max-self.V_min)/(self.z_max-self.z_min))
-        ax.set_ylabel('z')
-        ax.set_xlabel('V')
-        ax.set_title('dz/dt(z,V)')
-        plt.ioff()
-        plt.show()
+
+        if im is None and ax is None:
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+
+            im = ax.imshow(h2, extent=(self.V_min, self.V_max, self.z_max, self.z_min), cmap=cmap)
+            ax.set_aspect((self.V_max-self.V_min)/(self.z_max-self.z_min))
+            ax.set_ylabel('z')
+            ax.set_xlabel('V')
+            ax.set_title('dz/dt(z,V)')
+
+        elif im is None and ax is not None:
+            im = ax.imshow(h2, extent=(self.V_min, self.V_max, self.z_max, self.z_min), cmap=cmap)
+            ax.set_aspect((self.V_max-self.V_min)/(self.z_max-self.z_min))
+            ax.set_ylabel('z')
+            ax.set_xlabel('V')
+            ax.set_title('dz/dt(z,V)')
+
+        elif im is not None:
+            im.set_data(h2)
+
+        return ax, im
