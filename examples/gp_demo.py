@@ -94,7 +94,6 @@ def sample_model():
 
 
     # Plot the first particle trajectory
-    # plt.ion()
     fig = plt.figure()
     ax1 = fig.add_subplot(311)
     ax1.plot(t, z[:,observed_dims[0]], 'k')
