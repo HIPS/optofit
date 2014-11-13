@@ -151,6 +151,7 @@ def sample_model():
 
 # Now run the pMCMC inference
 def sample_z_given_x(t, x, inpt, gp,
+                     z0=None,
                      N_particles=100,
                      plot=False,
                      axs=None, gp_ax=None):
@@ -169,9 +170,9 @@ def sample_z_given_x(t, x, inpt, gp,
     D, I = body.initialize_offsets()
 
     # Set the initial distribution to be Gaussian around the steady state
-    z0 = np.zeros(D)
-    body.steady_state(z0)
-    init = GaussianInitialDistribution(z0, 0.1**2 * np.eye(D))
+    ss = np.zeros(D)
+    body.steady_state(ss)
+    init = GaussianInitialDistribution(ss, 0.1**2 * np.eye(D))
 
     # Set the proposal distribution using Hodgkin Huxley dynamics
     sigmas = 0.0001*np.ones(D)
@@ -185,12 +186,13 @@ def sample_z_given_x(t, x, inpt, gp,
     lkhd = PartialGaussianLikelihood(observed_dims, etas)
 
     # Initialize the latent state matrix to sample N=1 particle
-    z = np.ones((T,N_particles,D)) * z0[None, None, :]
-    z0 = z[:,0,:].copy('C')
+    z = np.ones((T,N_particles,D)) * ss[None, None, :]
+    if z0 is not None:
+        z[:,0,:] = z0
 
     # Prepare the particle Gibbs sampler with the first particle
     pf = ParticleGibbsAncestorSampling(T, N_particles, D)
-    pf.initialize(init, prop, lkhd, x, z0)
+    pf.initialize(init, prop, lkhd, x, z[:,0,:].copy('C'))
 
     # Plot the initial state
     I_gp = gp.current(z, z[:,0,0], np.arange(T), 0)
@@ -204,8 +206,10 @@ def sample_z_given_x(t, x, inpt, gp,
     plt.figure(2)
     plt.pause(0.001)
 
+    raw_input("Press any key to continue\n")
+
     # Initialize sample outputs
-    S = 100
+    S = 1
     z_smpls = np.zeros((S,T,D))
 
     for s in range(S):
@@ -227,6 +231,7 @@ def sample_z_given_x(t, x, inpt, gp,
 
         # Resample the GP
         import pdb; pdb.set_trace()
+        # raw_input("Press any key to continue\n")
         gp.resample(z_smpls[s,:,:])
         gp.plot(im=im)
 
@@ -241,6 +246,7 @@ def sample_z_given_x(t, x, inpt, gp,
     z_env[:,0] = np.concatenate((t, t[::-1]))
     z_env[:,1] = np.concatenate((z_mean[:,0] + z_std[:,0], z_mean[::-1,0] - z_std[::-1,0]))
 
+    plt.ioff()
     if plot:
         axs[0].add_patch(Polygon(z_env, facecolor='b', alpha=0.25, edgecolor='none'))
 
@@ -258,4 +264,4 @@ def sample_z_given_x(t, x, inpt, gp,
 t, z, x, inpt, gp, axs, gp_ax = sample_model()
 
 raw_input("Press enter to being sampling...\n")
-sample_z_given_x(t, x, inpt, gp, plot=True, axs=axs, gp_ax=gp_ax)
+sample_z_given_x(t, x, inpt, gp, plot=True, axs=axs, gp_ax=gp_ax, z0=z)

@@ -4,7 +4,7 @@ import numpy as np
 
 from channels import Channel
 
-from GPy.models import SparseGPRegression
+from GPy.models import SparseGPRegression, GPRegression
 from GPy.kern import rbf
 
 
@@ -140,7 +140,9 @@ class GPChannel(Channel):
         Y = np.vstack(Ys)
 
         # Set up the sparse GP regression model with the sampled inputs and outputs
-        gpr = SparseGPRegression(X, Y, self.kernel, Z=self.Z)
+        # gpr = SparseGPRegression(X, Y, self.kernel, Z=self.Z)
+        gpr = GPRegression(X, Y, self.kernel)
+
 
         # HACK: Rather than using a truly nonparametric approach, just sample
         # the GP at the grid of inducing points and interpolate at the GP mean
@@ -158,14 +160,14 @@ class GPChannel(Channel):
             fig = plt.figure()
             ax = fig.add_subplot(111)
 
-            im = ax.imshow(h2, extent=(self.V_min, self.V_max, self.z_max, self.z_min), cmap=cmap)
+            im = ax.imshow(h2, extent=(self.V_min, self.V_max, self.z_max, self.z_min), cmap=cmap, vmin=-5, vmax=5)
             ax.set_aspect((self.V_max-self.V_min)/(self.z_max-self.z_min))
             ax.set_ylabel('z')
             ax.set_xlabel('V')
             ax.set_title('dz/dt(z,V)')
 
         elif im is None and ax is not None:
-            im = ax.imshow(h2, extent=(self.V_min, self.V_max, self.z_max, self.z_min), cmap=cmap)
+            im = ax.imshow(h2, extent=(self.V_min, self.V_max, self.z_max, self.z_min), cmap=cmap, vmin=-5, vmax=5)
             ax.set_aspect((self.V_max-self.V_min)/(self.z_max-self.z_min))
             ax.set_ylabel('z')
             ax.set_xlabel('V')
