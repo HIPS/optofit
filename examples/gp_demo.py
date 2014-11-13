@@ -1,6 +1,10 @@
 import numpy as np
 # Set the random seed for reproducibility
-seed = np.random.randint(2**16)
+# seed = np.random.randint(2**16)
+seed = 10312
+print "Seed: ", seed
+np.random.seed(seed)
+
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
@@ -23,9 +27,6 @@ hypers = {
             'E_gp'   : 0.0,
          }
 
-print "Seed: ", seed
-np.random.seed(seed)
-
 def plot_state(t, z, axs=None, lines=None, I=None, color='k'):
     if lines is None and axs is None:
 
@@ -45,6 +46,7 @@ def plot_state(t, z, axs=None, lines=None, I=None, color='k'):
             l3 = ax3.plot(t, I, color=color)
             ax3.set_ylabel('I_{gp}')
             ax3.set_xlabel('t')
+            ax3.set_ylim([-15,15])
 
         axs = [ax1, ax2, ax3]
         lines = [l1, l2, l3]
@@ -206,8 +208,6 @@ def sample_z_given_x(t, x, inpt, gp,
     plt.figure(2)
     plt.pause(0.001)
 
-    raw_input("Press any key to continue\n")
-
     # Initialize sample outputs
     S = 100
     z_smpls = np.zeros((S,T,D))
@@ -226,7 +226,7 @@ def sample_z_given_x(t, x, inpt, gp,
         # Plot the sample
         I_gp = gp.current(z_smpls[s,:,:][:,None,:], z_smpls[s,:,0], np.arange(T), 0)
         plot_state(t, z_smpls[s,:,:], I=I_gp, lines=lines)
-        plt.autoscale()
+        # plt.autoscale()
 
         # Update the latent state figure
         plt.figure(2)
@@ -234,13 +234,14 @@ def sample_z_given_x(t, x, inpt, gp,
 
         # Resample the GP
         # import pdb; pdb.set_trace()
-        # raw_input("Press any key to continue\n")
         gp.resample(z_smpls[s,:,:])
         gp.plot(im=im)
 
         # Update the gp transition figure
         plt.figure(1)
         plt.pause(0.001)
+
+        # raw_input("Press any key to continue\n")
 
     z_mean = z_smpls.mean(axis=0)
     z_std = z_smpls.std(axis=0)

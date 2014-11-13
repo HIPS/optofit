@@ -58,9 +58,11 @@ class GPChannel(Channel):
         self.kernel = self.kernel_z.prod(self.kernel_V, tensor=True)
 
         # Initialize with a random sample from the prior
-        m = np.zeros(self.Z.shape[0])
-        C = self.kernel.K(self.Z)
-        self.h = np.random.multivariate_normal(m, C, 1).T
+        # m = np.zeros(self.Z.shape[0])
+        # C = self.kernel.K(self.Z)
+        # self.h = np.random.multivariate_normal(m, C, 1).T
+        gpr = SparseGPRegression(np.zeros((1,2)), np.zeros((1,1)), self.kernel, Z=self.Z)
+        self.h = gpr.posterior_samples_f(self.Z, 1)
 
         # Create a sparse GP model with the sampled function h
         # This will be used for prediction
@@ -138,6 +140,7 @@ class GPChannel(Channel):
 
         X = np.vstack(Xs)
         Y = np.vstack(Ys)
+        # plt.plot(X[:,1], X[:,0], 'ko')
 
         # Set up the sparse GP regression model with the sampled inputs and outputs
         # gpr = SparseGPRegression(X, Y, self.kernel, Z=self.Z)
@@ -146,7 +149,7 @@ class GPChannel(Channel):
 
         # HACK: Rather than using a truly nonparametric approach, just sample
         # the GP at the grid of inducing points and interpolate at the GP mean
-        self.h = gpr.posterior_samples(self.Z, size=1)
+        self.h = gpr.posterior_samples_f(self.Z, size=1)
 
         # HACK: Recreate the GP with the sampled function h
         self.gp = SparseGPRegression(self.Z, self.h, self.kernel, Z=self.Z)
