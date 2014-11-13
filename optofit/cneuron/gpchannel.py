@@ -120,14 +120,21 @@ class GPChannel(Channel):
         """
         Resample the dynamics function given a list of inferred voltage and state trajectories
         """
+        # TODO: Get dt
+
+        # Make sure d is a list
+        assert isinstance(data, list) or isinstance(data, np.ndarray)
+        if isinstance(data, np.ndarray):
+            data = [data]
+
         # Extract the latent states and voltages
         Xs = []
         Ys = []
         for d in data:
-            z = d[:,self.x_offset:self.x_offset][:,None]
+            z = d[:,self.x_offset][:,None]
             v = d[:,self.parent_compartment.x_offset][:,None]
             Xs.append(np.hstack((z[:-1,:],v[:-1,:])))
-            Ys.append(np.hstack((z[1:,:] - z[:-1,:])))
+            Ys.append(z[1:,:] - z[:-1,:])
 
         X = np.vstack(Xs)
         Y = np.vstack(Ys)

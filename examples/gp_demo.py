@@ -204,8 +204,6 @@ def sample_z_given_x(t, x, inpt, gp,
     plt.figure(2)
     plt.pause(0.001)
 
-
-
     # Initialize sample outputs
     S = 100
     z_smpls = np.zeros((S,T,D))
@@ -218,19 +216,22 @@ def sample_z_given_x(t, x, inpt, gp,
         # Sample a new trajectory given the updated kinetics and the previous sample
         z_smpls[s,:,:] = pf.sample()
 
-        # Resample the GP
-        I_gp = gp.current(z_smpls[s,:,:][:,None,:], z_smpls[s,:,0], np.arange(T), 0)
-
         # Plot the sample
+        I_gp = gp.current(z_smpls[s,:,:][:,None,:], z_smpls[s,:,0], np.arange(T), 0)
         plot_state(t, z_smpls[s,:,:], I=I_gp, lines=lines)
         plt.autoscale()
 
+        # Update the latent state figure
+        plt.figure(2)
+        plt.pause(0.001)
+
+        # Resample the GP
+        import pdb; pdb.set_trace()
+        gp.resample(z_smpls[s,:,:])
         gp.plot(im=im)
 
-        # Update figures
+        # Update the gp transition figure
         plt.figure(1)
-        plt.pause(0.001)
-        plt.figure(2)
         plt.pause(0.001)
 
     z_mean = z_smpls.mean(axis=0)
