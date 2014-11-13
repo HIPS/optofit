@@ -8,8 +8,6 @@ from compartment cimport Compartment
 
 from libc.math cimport exp, log
 
-#import GPy
-
 cdef class Channel(Component):
     """
     Abstract base class for an ion channel.

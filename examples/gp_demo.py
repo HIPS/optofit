@@ -1,15 +1,14 @@
 import numpy as np
 # Set the random seed for reproducibility
 seed = np.random.randint(2**16)
-print "Seed: ", seed
-# np.random.seed(seed)
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 
 from optofit.cneuron.compartment import Compartment
-from optofit.cneuron.channels import LeakChannel, GPChannel
+from optofit.cneuron.channels import LeakChannel
 from optofit.cneuron.simulate import forward_euler
+from optofit.cneuron.gpchannel import GPChannel
 
 from hips.inference.particle_mcmc import *
 from optofit.cinference.pmcmc import *
@@ -20,11 +19,13 @@ hypers = {
             'V0'     : -60.0,
             'g_leak' : 0.3,
             'E_leak' : -65.0,
-            'g_na'   : 120.0,
-            'E_na'   : 50.0,
-            'g_kdr'  : 36.0,
-            'E_kdr'  : -77.0
+            'g_gp'   : 1.0,
+            'E_gp'   : 50.0,
          }
+
+print "Seed: ", seed
+np.random.seed(seed)
+
 
 def sample_model():
     # Add a few channels
