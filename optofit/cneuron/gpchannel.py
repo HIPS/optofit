@@ -96,13 +96,23 @@ class GPChannel(Channel):
         # for us though.
         for s in range(S):
             t = ts[s]
-            for n in range(N):
-                V = x[t,n,self.parent_compartment.x_offset]
-                z = x[t,n,self.x_offset]
+            # for n in range(N):
+            #     V = x[t,n,self.parent_compartment.x_offset]
+            #     z = x[t,n,self.x_offset]
+            #
+            #     # Sample from the GP kinetics model
+            #     try:
+            #         m_pred, v_pred, _, _ = self.gp.predict(np.array([[z,V]]))
+            #         dxdt[t,n,self.x_offset] = m_pred[0]
+            #     except:
+            #         import pdb; pdb.set_trace()
+            V = x[t,:,self.parent_compartment.x_offset]
+            z = x[t,:,self.x_offset]
+            zz = np.hstack((np.reshape(z,(N,1)), np.reshape(V, (N,1))))
 
-                # Sample from the GP kinetics model
-                m_pred, v_pred, _, _ = self.gp.predict(np.array([[z,V]]))
-                dxdt[t,n,self.x_offset] = m_pred[0]
+            # Sample from the GP kinetics model
+            m_pred, v_pred, _, _ = self.gp.predict(zz)
+            dxdt[t,:,self.x_offset] = m_pred[:,0]
 
         return dxdt
 

@@ -26,26 +26,50 @@ hypers = {
 print "Seed: ", seed
 np.random.seed(seed)
 
-def plot_state(z, axs=None, I=None, color='k'):
-    if axs is None:
+def plot_state(t, z, axs=None, lines=None, I=None, color='k'):
+    if lines is None and axs is None:
+
         fig = plt.figure()
         ax1 = fig.add_subplot(311)
+        l1 = ax1.plot(t, z[:,0], color=color)
+        ax1.set_ylabel('V')
+
         ax2 = fig.add_subplot(312)
+        l2 = ax2.plot(t, sigma(z[:,1]), color=color)
+        ax2.set_ylabel('\\sigma(z_1)')
+        ax2.set_ylim((0,1))
+
         ax3 = fig.add_subplot(313)
+        l3 = None
+        if I is not None:
+            l3 = ax3.plot(t, I, color=color)
+            ax3.set_ylabel('I_{gp}')
+            ax3.set_xlabel('t')
 
-    # Plot the voltage
-    ax1.plot(t, z[:,0], color=color)
-    # ax1.plot(t, x[:,0],  'r')
-    ax1.set_ylabel('V')
+        axs = [ax1, ax2, ax3]
+        lines = [l1, l2, l3]
 
-    ax2.plot(t, sigma(z[:,1]), color=color)
-    ax2.set_ylabel('\\sigma(z_1)')
-    ax2.set_ylim((0,1))
+    elif lines is None and axs is not None:
+        ax1 = axs[0]
+        l1 = ax1.plot(t, z[:,0], color=color)
 
-    if I is not None:
-        ax3.plot(t, I, color=color)
-        ax3.set_ylabel('I_{gp}')
-        ax3.set_xlabel('t')
+        ax2 = axs[1]
+        l2 = ax2.plot(t, sigma(z[:,1]), color=color)
+
+        ax3 = axs[2]
+        l3 = None
+        if I is not None:
+            l3 = ax3.plot(t, I, color=color)
+
+        lines = [l1, l2, l3]
+
+    elif lines is not None:
+        lines[0][0].set_data(t, z[:,0])
+        lines[1][0].set_data(t, sigma(z[:,1]))
+        if I is not None:
+            lines[2][0].set_data(t, I)
+
+    return axs, lines
 
 def sample_model():
     # Add a few channels
@@ -79,7 +103,7 @@ def sample_model():
 
     # Set the proposal distribution using Hodgkin Huxley dynamics
     # TODO: Fix the hack which requires us to know the number of particles
-    N = 1
+    N = 100
     sigmas = 0.0001*np.ones(D)
     # Set the voltage transition dynamics to be a bit noisier
     sigmas[body.x_offset] = 0.25
@@ -129,12 +153,12 @@ def sample_model():
     # ax3.plot(t, I_gp, 'k')
     # ax3.set_ylabel('I_{gp}')
     # ax3.set_xlabel('t')
-    plot_state(z, I=I_gp, color='k')
+    axs, _ = plot_state(t, z, I=I_gp, color='k')
     plt.ion()
     plt.show()
     plt.pause(0.01)
 
-    return t, z, x, init, prop, lkhd
+    return t, z, x, init, prop, lkhd, axs
 
 # Now run the pMCMC inference
 def sample_z_given_x(t, z_curr, x,
@@ -142,7 +166,6 @@ def sample_z_given_x(t, z_curr, x,
                      N_particles=100,
                      plot=False,
                      axs=None):
-
     T,D = z_curr.shape
     T,O = x.shape
     # import pdb; pdb.set_trace()
@@ -151,13 +174,17 @@ def sample_z_given_x(t, z_curr, x,
 
     S = 100
     z_smpls = np.zeros((S,T,D))
-    l = plt.plot(t, z_smpls[0,:,0], 'b')
+
+    _, lines = plot_state(t, z, color='b', axs=axs)
+    plt.pause(0.001)
+
     for s in range(S):
         print "Iteration %d" % s
         # Reinitialize with the previous particle
         pf.initialize(init, prop, lkhd, x, z_smpls[s,:,:])
         z_smpls[s,:,:] = pf.sample()
-        l[0].set_data(t, z_smpls[s,:,0])
+        # l[0].set_data(t, z_smpls[s,:,0])
+        plot_state(t, z_smpls[s,:,:], lines=lines)
         plt.pause(0.01)
 
     z_mean = z_smpls.mean(axis=0)
@@ -172,7 +199,7 @@ def sample_z_given_x(t, z_curr, x,
         # plt.plot(t, z_mean[:,0], 'b', lw=1)
 
         # Compute the current
-        plot_state(z_mean, axs=axs, color='b')
+        plot_state(t, z_mean, axs=axs, color='b')
 
         # Plot a few random samples
         # for s in range(10):
@@ -184,5 +211,5 @@ def sample_z_given_x(t, z_curr, x,
 
     return z_smpls
 
-t, z, x, init, prop, lkhd = sample_model()
-sample_z_given_x(t, z, x, init, prop, lkhd, plot=True)
+t, z, x, init, prop, lkhd, axs = sample_model()
+sample_z_given_x(t, z, x, init, prop, lkhd, plot=True, axs=axs)
