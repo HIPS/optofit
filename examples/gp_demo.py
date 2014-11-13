@@ -188,7 +188,7 @@ def sample_z_given_x(t, x, inpt, gp,
     lkhd = PartialGaussianLikelihood(observed_dims, etas)
 
     # Initialize the latent state matrix to sample N=1 particle
-    z = np.ones((T,N_particles,D)) * ss[None, None, :]
+    z = np.ones((T,N_particles,D)) * ss[None, None, :] + np.random.randn(T,N_particles,D) * sigmas[None, None, :]
     if z0 is not None:
         z[:,0,:] = z0
 
@@ -198,7 +198,7 @@ def sample_z_given_x(t, x, inpt, gp,
 
     # Plot the initial state
     I_gp = gp.current(z, z[:,0,0], np.arange(T), 0)
-    gp_ax, im = gp.plot(ax=gp_ax)
+    gp_ax, im, l_gp = gp.plot(ax=gp_ax, data=z[:,0,:])
 
     axs, lines = plot_state(t, z[:,0,:], color='b', I=I_gp, axs=axs)
 
@@ -211,8 +211,7 @@ def sample_z_given_x(t, x, inpt, gp,
     # Initialize sample outputs
     S = 100
     z_smpls = np.zeros((S,T,D))
-    z_smpls[0,:,:] = z0
-
+    z_smpls[0,:,:] = z[:,0,:]
 
     for s in range(1,S):
         print "Iteration %d" % s
@@ -221,21 +220,18 @@ def sample_z_given_x(t, x, inpt, gp,
 
         # Sample a new trajectory given the updated kinetics and the previous sample
         z_smpls[s,:,:] = pf.sample()
-        # z_smpls[s,:,:] = z_smpls[s-1,:,:]
 
         # Plot the sample
         I_gp = gp.current(z_smpls[s,:,:][:,None,:], z_smpls[s,:,0], np.arange(T), 0)
         plot_state(t, z_smpls[s,:,:], I=I_gp, lines=lines)
-        # plt.autoscale()
 
         # Update the latent state figure
         plt.figure(2)
         plt.pause(0.001)
 
         # Resample the GP
-        # import pdb; pdb.set_trace()
         gp.resample(z_smpls[s,:,:])
-        gp.plot(im=im)
+        gp.plot(im=im, l=l_gp, data=z_smpls[s,:,:])
 
         # Update the gp transition figure
         plt.figure(1)
@@ -268,4 +264,4 @@ def sample_z_given_x(t, x, inpt, gp,
 t, z, x, inpt, gp, axs, gp_ax = sample_model()
 
 raw_input("Press enter to being sampling...\n")
-sample_z_given_x(t, x, inpt, gp, plot=True, axs=axs, gp_ax=gp_ax, z0=z)
+sample_z_given_x(t, x, inpt, gp, plot=True, axs=axs, gp_ax=gp_ax, z0=None)

@@ -118,12 +118,7 @@ class GPChannel(Channel):
 
         return dxdt
 
-    def resample(self, data=[]):
-        """
-        Resample the dynamics function given a list of inferred voltage and state trajectories
-        """
-        # TODO: Get dt
-
+    def _compute_regression_data(self, data=[]):
         # Make sure d is a list
         assert isinstance(data, list) or isinstance(data, np.ndarray)
         if isinstance(data, np.ndarray):
@@ -140,7 +135,14 @@ class GPChannel(Channel):
 
         X = np.vstack(Xs)
         Y = np.vstack(Ys)
-        # plt.plot(X[:,1], X[:,0], 'ko')
+
+        return X,Y
+    def resample(self, data=[]):
+        """
+        Resample the dynamics function given a list of inferred voltage and state trajectories
+        """
+        # TODO: Get dt
+        X,Y = self._compute_regression_data(data)
 
         # Set up the sparse GP regression model with the sampled inputs and outputs
         # gpr = SparseGPRegression(X, Y, self.kernel, Z=self.Z)
@@ -154,7 +156,7 @@ class GPChannel(Channel):
         # HACK: Recreate the GP with the sampled function h
         self.gp = SparseGPRegression(self.Z, self.h, self.kernel, Z=self.Z)
 
-    def plot(self, ax=None, im=None, cmap=plt.cm.hot):
+    def plot(self, ax=None, im=None, l=None, cmap=plt.cm.hot, data=[]):
 
         # Reshape into a 2D function image
         h2 = self.h.reshape((self.grid,self.grid))
@@ -179,4 +181,16 @@ class GPChannel(Channel):
         elif im is not None:
             im.set_data(h2)
 
-        return ax, im
+        if len(data) > 0:
+            X,Y = self._compute_regression_data(data)
+            if l is None and ax is not None:
+                l = ax.plot(X[:,1], X[:,0], 'ko')
+            elif l is not None:
+                l[0].set_data(X[:,1], X[:,0])
+
+        if ax is not None:
+            ax.set_xlim([self.V_min, self.V_max])
+            ax.set_ylim([self.z_max, self.z_min])
+
+
+        return ax, im, l
