@@ -82,6 +82,74 @@ cdef class Compartment(Component):
         for c in self.children:
             c.kinetics(dxdt, x, inpt, ts)
 
+    def plot(self, t, z, axs=None, lines=None, currents=True, color='k'):
+        """
+        Plot the latent state. If we aren't given axes or lines, create a new figure first.
+        If we're given the axes but not lines, plot in the existing axes.
+        If we're given handles to lines, update the line data.
+        """
+        import matplotlib.pyplot as plt
+        import numpy as np
+
+        if currents == False:
+            raise NotImplementedError()
+
+        assert z.ndim == 2
+        zz = z[:,None,:].copy('C')
+        V = z[:,self.x_offset].copy('C')
+        T = z.shape[0]
+        C = len(self.children)
+        # Compute the current
+        I = np.zeros((T, C))
+        for m,c in enumerate(self.children):
+            for i in range(T):
+                I[i,m] = c.g * c.current(zz, V[i], i, 0)
+
+        M = 1 + C
+        if lines is None and axs is None:
+            axs = []
+            lines = []
+
+            fig = plt.figure()
+            ax1 = fig.add_subplot(M,1,1)
+            l1 = ax1.plot(t, V, color=color)
+            ax1.set_ylabel('V')
+
+            axs.append(ax1)
+            lines.append(l1)
+
+            for m,c in enumerate(self.children):
+                axm = fig.add_subplot(M,1,m+2)
+                lm = axm.plot(t, I[:,m], color=color)
+
+                axm.set_ylabel('I_%s' % c.name)
+                axm.set_ylim((-15,15))
+
+                axs.append(axm)
+                lines.append(lm)
+
+        elif lines is None and axs is not None:
+            lines = []
+            ax1 = axs[0]
+            l1 = ax1.plot(t, z[:,self.x_offset], color=color)
+
+            lines.append(l1)
+
+            for m,c in enumerate(self.children):
+                axm = axs[1+m]
+                # Compute the current
+                V = z[:,self.x_offset]
+                lm = axm.plot(t, I[:,m], color=color)
+
+                lines.append(lm)
+
+        elif lines is not None:
+            lines[0][0].set_data(t, z[:, self.x_offset])
+
+            for m,c in enumerate(self.children):
+                lines[1+m][0].set_data(t, I[:,m])
+
+        return axs, lines
 
 cdef class SquidCompartment(Compartment):
     """
