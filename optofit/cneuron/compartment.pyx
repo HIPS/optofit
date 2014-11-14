@@ -103,8 +103,8 @@ cdef class Compartment(Component):
         I = np.zeros((T, C))
         for m,c in enumerate(self.children):
             for i in range(T):
-                #I[i,m] = c.g * c.current(zz, V[i], i, 0)
-                I[i,m] = c.current(zz, V[i], i, 0)
+                I[i,m] = c.g * c.current(zz, V[i], i, 0)
+                # I[i,m] = c.current(zz, V[i], i, 0)
 
         M = 1 + C
         if lines is None and axs is None:
@@ -131,6 +131,7 @@ cdef class Compartment(Component):
 
         elif lines is None and axs is not None:
             lines = []
+            assert len(axs) == M, "compartment.plot received incorrect number of axes"
             ax1 = axs[0]
             l1 = ax1.plot(t, z[:,self.x_offset], color=color)
 

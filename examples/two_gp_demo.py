@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 
 from optofit.cneuron.compartment import Compartment, SquidCompartment
-from optofit.cneuron.channels import LeakChannel
+from optofit.cneuron.channels import LeakChannel, NaChannel, KdrChannel
 from optofit.cneuron.simulate import forward_euler
 from optofit.cneuron.gpchannel import GPChannel, sigma
 
@@ -21,16 +21,28 @@ np.random.seed(seed)
 hypers = {
             'C'      : 1.0,
             'V0'     : -60.0,
-            'g_leak' : 0.003,
+            'g_leak' : 0.3,
             'E_leak' : -65.0}
 
-gp1_hypers = {'sig' : 3,
-            'g_gp'   : 1.20,
+gp1_hypers = {'sig' : 1,
+            'g_gp'   : 0.0,
             'E_gp'   : 50.0}
 
-gp2_hypers = { 'sig' : 3,
-            'g_gp'   : .360,
+gp2_hypers = { 'sig' : 1,
+            'g_gp'   : 36.0,
             'E_gp'   : -77.0}
+
+squid_hypers = {
+            'C'      : 1.0,
+            'V0'     : -60.0,
+            'g_leak' : 0.3,
+            'E_leak' : -65.0,
+            'g_na'   : 0.0,
+            'E_na'   : 50.0,
+            'g_kdr'  : 36.0,
+            'E_kdr'  : -77.0
+         }
+
 
 def create_gp_model():
     # Add a few channels
@@ -48,19 +60,14 @@ def create_gp_model():
     return body, gp1, gp2, D, I
 
 def sample_squid_model():
-
-    squid_hypers = {
-            'C'      : 1.0,
-            'V0'     : -60.0,
-            'g_leak' : 0.3,
-            'E_leak' : -65.0,
-            'g_na'   : 120.0,
-            'E_na'   : 50.0,
-            'g_kdr'  : 36.0,
-            'E_kdr'  : -77.0
-         }
-
     squid_body = SquidCompartment(name='body', hypers=squid_hypers)
+    # squid_body = Compartment(name='body', hypers=squid_hypers)
+    # leak = LeakChannel(name='leak', hypers=squid_hypers)
+    # na = NaChannel(name='na', hypers=squid_hypers)
+    # kdr = KdrChannel(name='kdr', hypers=squid_hypers)
+    # squid_body.add_child(leak)
+    # body.add_child(na)
+    # squid_body.add_child(kdr)
 
     # Initialize the model
     D, I = squid_body.initialize_offsets()
@@ -68,7 +75,7 @@ def sample_squid_model():
     # Set the recording duration
     t_start = 0
     t_stop = 100.
-    dt = 0.01
+    dt = 0.1
     t = np.arange(t_start, t_stop, dt)
     T = len(t)
 
@@ -115,8 +122,7 @@ def sample_squid_model():
     z = z[:,0,:].copy(order='C')
 
     # Downsample
-    import pdb; pdb.set_trace()
-    t_ds = 0.1
+    t_ds = 1.0
     intvl = int(t_ds / dt)
     td = t[::intvl].copy('C')
     zd = z[::intvl, :].copy('C')
@@ -155,7 +161,7 @@ def sample_gp_model():
     init = GaussianInitialDistribution(z0, 0.1**2 * np.eye(D))
 
     # Set the proposal distribution using Hodgkin Huxley dynamics
-    sigmas = 0.01*np.ones(D)
+    sigmas = 0.0001*np.ones(D)
     # Set the voltage transition dynamics to be a bit noisier
     sigmas[body.x_offset] = 0.25
     prop = HodgkinHuxleyProposal(T, 1, D, body,  sigmas, t, inpt)
@@ -223,7 +229,7 @@ def sample_z_given_x(t, x, inpt,
     init = GaussianInitialDistribution(ss, 0.1**2 * np.eye(D))
 
     # Set the proposal distribution using Hodgkin Huxley dynamics
-    sigmas = 0.0001*np.ones(D)
+    sigmas = 0.01*np.ones(D)
     # Set the voltage transition dynamics to be a bit noisier
     sigmas[body.x_offset] = 0.25
     prop = HodgkinHuxleyProposal(T, N_particles, D, body,  sigmas, t, inpt)
@@ -269,6 +275,8 @@ def sample_z_given_x(t, x, inpt,
         # Resample the GP
         gp1.resample(z_smpls[s,:,:], dt)
         gp2.resample(z_smpls[s,:,:], dt)
+
+        # TODO: Resample conductances and noise levels
 
         # Plot the sample
         body.plot(t, z_smpls[s,:,:], lines=lines)

@@ -32,9 +32,9 @@ class GPChannel(Channel):
         # Gaussian process regression.
         # Lay out a grid of inducing points for a sparse GP
         self.grid = 10
-        self.z_min = sigma_inv(0.005)
-        self.z_max = sigma_inv(0.995)
-        self.V_min = -65.
+        self.z_min = sigma_inv(0.001)
+        self.z_max = sigma_inv(0.999)
+        self.V_min = -80.
         self.V_max = 120.
         self.Z = np.array(list(
                       itertools.product(*([np.linspace(self.z_min, self.z_max, self.grid) for _ in range(self.n_x)]
@@ -50,7 +50,7 @@ class GPChannel(Channel):
             self.kernel_z = self.kernel_z.prod(rbf(kernel_z_hyps))
 
         kernel_V_hyps = { 'input_dim' : 1,
-                          'variance' : 1,
+                          'variance' : hypers['sig'],
                           'lengthscale' : (self.V_max-self.V_min)/4.}
         self.kernel_V = rbf(**kernel_V_hyps)
 
@@ -110,7 +110,7 @@ class GPChannel(Channel):
             if self.model_dzdt:
                 dxdt[t,:,self.x_offset] = m_pred[:,0]
             else:
-                dxdt[t,:,self.x_offset] = (m_pred[:,0] - z)
+                dxdt[t,:,self.x_offset] = m_pred[:,0] - z
 
         return dxdt
 
