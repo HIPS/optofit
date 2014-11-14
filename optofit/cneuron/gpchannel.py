@@ -42,7 +42,7 @@ class GPChannel(Channel):
 
         # Create independent RBF kernels over Z and V
         kernel_z_hyps = { 'input_dim' : 1,
-                          'variance' : 1,
+                          'variance' : hypers['sig'],
                           'lengthscale' : (self.z_max-self.z_min)/4.}
 
         self.kernel_z = rbf(**kernel_z_hyps)
@@ -58,11 +58,13 @@ class GPChannel(Channel):
         self.kernel = self.kernel_z.prod(self.kernel_V, tensor=True)
 
         # Initialize with a random sample from the prior
-        # m = np.zeros(self.Z.shape[0])
-        # C = self.kernel.K(self.Z)
-        # self.h = np.random.multivariate_normal(m, C, 1).T
-        gpr = SparseGPRegression(np.zeros((1,2)), np.zeros((1,1)), self.kernel, Z=self.Z)
-        self.h = gpr.posterior_samples_f(self.Z, 1)
+        self.model_dzdt = True
+        if self.model_dzdt:
+            m = np.zeros(self.Z.shape[0])
+        else:
+            m = self.Z[:,0]
+        C = self.kernel.K(self.Z)
+        self.h = np.random.multivariate_normal(m, C, 1).T
 
         # Create a sparse GP model with the sampled function h
         # This will be used for prediction
@@ -98,55 +100,63 @@ class GPChannel(Channel):
         # for us though.
         for s in range(S):
             t = ts[s]
-            # for n in range(N):
-            #     V = x[t,n,self.parent_compartment.x_offset]
-            #     z = x[t,n,self.x_offset]
-            #
-            #     # Sample from the GP kinetics model
-            #     try:
-            #         m_pred, v_pred, _, _ = self.gp.predict(np.array([[z,V]]))
-            #         dxdt[t,n,self.x_offset] = m_pred[0]
-            #     except:
-            #         import pdb; pdb.set_trace()
             V = x[t,:,self.parent_compartment.x_offset]
             z = x[t,:,self.x_offset]
             zz = np.hstack((np.reshape(z,(N,1)), np.reshape(V, (N,1))))
 
             # Sample from the GP kinetics model
             m_pred, v_pred, _, _ = self.gp.predict(zz)
-            dxdt[t,:,self.x_offset] = m_pred[:,0]
+
+            if self.model_dzdt:
+                dxdt[t,:,self.x_offset] = m_pred[:,0]
+            else:
+                dxdt[t,:,self.x_offset] = (m_pred[:,0] - z)
 
         return dxdt
 
-    def _compute_regression_data(self, data=[]):
+    def _compute_regression_data(self, datas, dts):
         # Make sure d is a list
-        assert isinstance(data, list) or isinstance(data, np.ndarray)
-        if isinstance(data, np.ndarray):
-            data = [data]
+        assert isinstance(datas, list) or isinstance(datas, np.ndarray)
+        if isinstance(datas, np.ndarray):
+            datas = [datas]
+
+        assert isinstance(dts, list) or isinstance(dts, np.ndarray) or np.isscalar(dts)
+        if isinstance(dts, np.ndarray):
+            dts = [dts]
+        elif np.isscalar(dts):
+            dts = [dts * np.ones((data.shape[0]-1,1)) for data in datas]
 
         # Extract the latent states and voltages
         Xs = []
         Ys = []
-        for d in data:
-            z = d[:,self.x_offset][:,None]
-            v = d[:,self.parent_compartment.x_offset][:,None]
+        for data, dt in zip(datas, dts):
+            z = data[:,self.x_offset][:,None]
+            v = data[:,self.parent_compartment.x_offset][:,None]
+
             Xs.append(np.hstack((z[:-1,:],v[:-1,:])))
-            Ys.append(z[1:,:] - z[:-1,:])
+
+            if self.model_dzdt:
+                ddt = dt.reshape((z.shape[0]-1, 1))
+                dz = (z[1:,:] - z[:-1,:]) / ddt
+                Ys.append(dz)
+            else:
+                Ys.append(z[1:,:])
 
         X = np.vstack(Xs)
         Y = np.vstack(Ys)
 
         return X,Y
-    def resample(self, data=[]):
+
+    def resample(self, data=[], dt=1):
         """
         Resample the dynamics function given a list of inferred voltage and state trajectories
         """
         # TODO: Get dt
-        X,Y = self._compute_regression_data(data)
+        X,Y = self._compute_regression_data(data, dt)
 
         # Set up the sparse GP regression model with the sampled inputs and outputs
-        # gpr = SparseGPRegression(X, Y, self.kernel, Z=self.Z)
-        gpr = GPRegression(X, Y, self.kernel)
+        gpr = SparseGPRegression(X, Y, self.kernel, Z=self.Z)
+        # gpr = GPRegression(X, Y, self.kernel)
 
 
         # HACK: Rather than using a truly nonparametric approach, just sample
@@ -165,24 +175,24 @@ class GPChannel(Channel):
             fig = plt.figure()
             ax = fig.add_subplot(111)
 
-            im = ax.imshow(h2, extent=(self.V_min, self.V_max, self.z_max, self.z_min), cmap=cmap, vmin=-5, vmax=5)
+            im = ax.imshow(h2, extent=(self.V_min, self.V_max, self.z_max, self.z_min), cmap=cmap, vmin=-15, vmax=15)
             ax.set_aspect((self.V_max-self.V_min)/(self.z_max-self.z_min))
             ax.set_ylabel('z')
             ax.set_xlabel('V')
-            ax.set_title('dz/dt(z,V)')
+            ax.set_title('dz_%s/dt(z,V)' % self.name)
 
         elif im is None and ax is not None:
-            im = ax.imshow(h2, extent=(self.V_min, self.V_max, self.z_max, self.z_min), cmap=cmap, vmin=-5, vmax=5)
+            im = ax.imshow(h2, extent=(self.V_min, self.V_max, self.z_max, self.z_min), cmap=cmap, vmin=-15, vmax=15)
             ax.set_aspect((self.V_max-self.V_min)/(self.z_max-self.z_min))
             ax.set_ylabel('z')
             ax.set_xlabel('V')
-            ax.set_title('dz/dt(z,V)')
+            ax.set_title('dz_%s/dt(z,V)' % self.name)
 
         elif im is not None:
             im.set_data(h2)
 
         if len(data) > 0:
-            X,Y = self._compute_regression_data(data)
+            X,Y = self._compute_regression_data(data, dts=1)
             if l is None and ax is not None:
                 l = ax.plot(X[:,1], X[:,0], 'ko')
             elif l is not None:
