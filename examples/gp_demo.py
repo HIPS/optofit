@@ -191,9 +191,9 @@ def sample_z_given_x(t, z_curr, x,
         plot_state(t, z_mean, axs=axs, color='b')
 
         # Plot a few random samples
-        # for s in range(10):
-        #     si = np.random.randint(S)
-        #     plt.plot(t, z_smpls[si,:,0], '-b', lw=0.5)
+        for s in range(10):
+             si = np.random.randint(S)
+             plt.plot(t, z_smpls[si,:,0], '-b', lw=0.5)
 
         plt.ioff()
         plt.show()
