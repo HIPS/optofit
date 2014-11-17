@@ -59,7 +59,7 @@ class GPChannel(Channel):
         self.kernel = self.kernel_z.prod(self.kernel_V, tensor=True)
 
         # Initialize with a random sample from the prior
-        self.model_dzdt = True
+        self.model_dzdt = False
         if self.model_dzdt:
             m = np.zeros(self.Z.shape[0])
         else:
@@ -171,6 +171,8 @@ class GPChannel(Channel):
 
         # HACK: Recreate the GP with the sampled function h
         self.gp = SparseGPRegression(self.Z, self.h, self.kernel, Z=self.Z)
+
+        # import pdb; pdb.set_trace()
 
     def plot(self, ax=None, im=None, l=None, cmap=plt.cm.hot, data=[]):
 

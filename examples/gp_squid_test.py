@@ -78,6 +78,7 @@ def sample_squid_model():
     t_start = 0
     t_stop = 100.
     dt = 0.1
+    t_ds = 0.1
     t = np.arange(t_start, t_stop, dt)
     T = len(t)
 
@@ -124,7 +125,6 @@ def sample_squid_model():
     z = z[:,0,:].copy(order='C')
 
     # Downsample
-    t_ds = 0.1
     intvl = int(t_ds / dt)
     td = t[::intvl].copy('C')
     zd = z[::intvl, :].copy('C')
