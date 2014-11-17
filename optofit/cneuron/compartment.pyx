@@ -11,6 +11,9 @@ from component import Component
 
 from channels cimport Channel
 
+import numpy as np
+from hips.inference.mh import mh
+
 cdef class Compartment(Component):
     """
     Simple compartment model with voltage
@@ -82,6 +85,7 @@ cdef class Compartment(Component):
         for c in self.children:
             c.kinetics(dxdt, x, inpt, ts)
 
+
     def plot(self, t, z, axs=None, lines=None, currents=True, color='k'):
         """
         Plot the latent state. If we aren't given axes or lines, create a new figure first.
@@ -103,8 +107,8 @@ cdef class Compartment(Component):
         I = np.zeros((T, C))
         for m,c in enumerate(self.children):
             for i in range(T):
-                I[i,m] = c.g * c.current(zz, V[i], i, 0)
-                # I[i,m] = c.current(zz, V[i], i, 0)
+                # I[i,m] = c.g * c.current(zz, V[i], i, 0)
+                I[i,m] = c.current(zz, V[i], i, 0)
 
         M = 1 + C
         if lines is None and axs is None:
@@ -124,7 +128,7 @@ cdef class Compartment(Component):
                 lm = axm.plot(t, I[:,m], color=color)
 
                 axm.set_ylabel('I_%s' % c.name)
-                axm.set_ylim((-100,100))
+                axm.set_ylim((-20,20))
 
                 axs.append(axm)
                 lines.append(lm)
@@ -152,6 +156,7 @@ cdef class Compartment(Component):
                 lines[1+m][0].set_data(t, I[:,m])
 
         return axs, lines
+
 
 cdef class SquidCompartment(Compartment):
     """

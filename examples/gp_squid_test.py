@@ -9,7 +9,7 @@ from matplotlib.patches import Polygon
 from optofit.cneuron.compartment import Compartment, SquidCompartment
 from optofit.cneuron.channels import LeakChannel, NaChannel, KdrChannel
 from optofit.cneuron.simulate import forward_euler
-from optofit.cneuron.gpchannel import GPChannel, sigma
+from optofit.cneuron.gpchannel import GPChannel, sigma, GPKdrChannel
 
 from hips.inference.particle_mcmc import *
 from optofit.cinference.pmcmc import *
@@ -25,7 +25,8 @@ hypers = {
             'E_leak' : -65.0}
 
 gp1_hypers = {'sig' : 1,
-            'g_gp'   : 12.0,
+            # 'g_gp'   : 12.0,
+            'g_gp'   : 0.0,
             'E_gp'   : 50.0}
 
 gp2_hypers = { 'sig' : 1,
@@ -37,7 +38,8 @@ squid_hypers = {
             'V0'     : -60.0,
             'g_leak' : 0.03,
             'E_leak' : -65.0,
-            'g_na'   : 12.0,
+            # 'g_na'   : 12.0,
+            'g_na'   : 0.0,
             'E_na'   : 50.0,
             'g_kdr'  : 3.60,
             'E_kdr'  : -77.0
@@ -49,7 +51,7 @@ def create_gp_model():
     body = Compartment(name='body', hypers=hypers)
     leak = LeakChannel(name='leak', hypers=hypers)
     gp1 = GPChannel(name='gpna', hypers=gp1_hypers)
-    gp2 = GPChannel(name='gpk', hypers=gp2_hypers)
+    gp2 = GPKdrChannel(name='gpk', hypers=gp2_hypers)
 
     body.add_child(leak)
     body.add_child(gp1)
@@ -76,6 +78,7 @@ def sample_squid_model():
     t_start = 0
     t_stop = 100.
     dt = 0.1
+    t_ds = 0.1
     t = np.arange(t_start, t_stop, dt)
     T = len(t)
 
@@ -122,7 +125,6 @@ def sample_squid_model():
     z = z[:,0,:].copy(order='C')
 
     # Downsample
-    t_ds = 0.1
     intvl = int(t_ds / dt)
     td = t[::intvl].copy('C')
     zd = z[::intvl, :].copy('C')
@@ -138,85 +140,24 @@ def sample_squid_model():
     # plt.plot(t, x[:,0],  'r')
     plt.show()
     plt.pause(0.01)
-
     return td, zd, xd, inptd, st_axs
 
-def sample_gp_model():
-    body, gp1, gp2, D, I = create_gp_model()
-    # Set the recording duration
-    t_start = 0
-    t_stop = 100.
-    dt = 1.0
-    t = np.arange(t_start, t_stop, dt)
-    T = len(t)
-
-    # Make input with an injected current from 500-600ms
-    inpt = np.zeros((T, I))
-    inpt[50/dt:60/dt,:] = 7.
-    inpt += np.random.randn(T, I)
-
-    # Set the initial distribution to be Gaussian around the steady state
-    z0 = np.zeros(D)
-    body.steady_state(z0)
-    init = GaussianInitialDistribution(z0, 0.1**2 * np.eye(D))
-
-    # Set the proposal distribution using Hodgkin Huxley dynamics
-    sigmas = 0.0001*np.ones(D)
-    # Set the voltage transition dynamics to be a bit noisier
-    sigmas[body.x_offset] = 0.25
-    prop = HodgkinHuxleyProposal(T, 1, D, body,  sigmas, t, inpt)
-
-    # Set the observation model to observe only the voltage
-    etas = np.ones(1)
-    observed_dims = np.array([body.x_offset]).astype(np.int32)
-    lkhd = PartialGaussianLikelihood(observed_dims, etas)
-
-    # Initialize the latent state matrix to sample N=1 particle
+def sample_from_model(T,D, init, prop):
     z = np.zeros((T,1,D))
-    z[0,0,:] = init.sample()
-    # Initialize the output matrix
-    x = np.zeros((T,D))
-
-    # Sample the latent state sequence
+    z[0,0,:] = init.sample()[:]
+    # Sample the latent state sequence with the given initial condition
     for i in np.arange(0,T-1):
         # The interface kinda sucks. We have to tell it that
         # the first particle is always its ancestor
         prop.sample_next(z, i, np.array([0], dtype=np.int32))
 
-    # Sample observations
-    for i in np.arange(0,T):
-        lkhd.sample(z,x,i,0)
-
-    # Extract the first (and in this case only) particle
-    z = z[:,0,:].copy(order='C')
-
-    # Plot the first particle trajectory
-    st_axs, _ = body.plot(t, z, color='k')
-    # Plot the observed voltage
-    st_axs[0].plot(t, x[:,0], 'r')
-
-    # Plot the GP channel dynamics
-    gp1_fig = plt.figure()
-    gp1_ax1 = gp1_fig.add_subplot(121)
-    gp1.plot(ax=gp1_ax1)
-    gp1_ax2 = gp1_fig.add_subplot(122)
-
-    gp2_fig = plt.figure()
-    gp2_ax1 = gp2_fig.add_subplot(121)
-    gp2.plot(ax=gp2_ax1)
-    gp2_ax2 = gp2_fig.add_subplot(122)
-
-    plt.ion()
-    plt.show()
-    plt.pause(0.01)
-
-    return t, z, x, inpt, st_axs, gp1_ax2, gp2_ax2
+    return z[:,0,:]
 
 # Now run the pMCMC inference
-def sample_z_given_x(t, x, inpt,
-                     z0=None,
-                     N_particles=100,
-                     axs=None, gp1_ax=None, gp2_ax=None):
+def sample_gp_given_true_z(t, x, inpt,
+                           z_squid,
+                           N_particles=100,
+                           axs=None, gp1_ax=None, gp2_ax=None):
     dt = np.diff(t)
     T,O = x.shape
 
@@ -229,7 +170,7 @@ def sample_z_given_x(t, x, inpt,
     init = GaussianInitialDistribution(ss, 0.1**2 * np.eye(D))
 
     # Set the proposal distribution using Hodgkin Huxley dynamics
-    sigmas = 0.1*np.ones(D)
+    sigmas = 0.001*np.ones(D)
     # Set the voltage transition dynamics to be a bit noisier
     sigmas[body.x_offset] = 0.25
     prop = HodgkinHuxleyProposal(T, N_particles, D, body,  sigmas, t, inpt)
@@ -239,30 +180,17 @@ def sample_z_given_x(t, x, inpt,
     observed_dims = np.array([body.x_offset]).astype(np.int32)
     lkhd = PartialGaussianLikelihood(observed_dims, etas)
 
-    # Initialize the latent state matrix to sample N=1 particle
-    z = np.ones((T,N_particles,D)) * ss[None, None, :] + np.random.randn(T,N_particles,D) * sigmas[None, None, :]
-    if z0 is not None:
-        z[:,0,:] = z0
-    else:
-        # Sample the latent state sequence with the given initial condition
-        for i in np.arange(0,T-1):
-            # The interface kinda sucks. We have to tell it that
-            # the first particle is always its ancestor
-            prop.sample_next(z, i, np.array([0], dtype=np.int32))
+    # Initialize the latent state matrix with the equivalent of the squid latent state
+    z = np.zeros((T,1,D))
+    z[:,0,0] = z_squid[:,0]              # V = V
 
-            # Fix the observed voltage
-            # z[i+1, 0, body.x_offset] = x[i+1, body.x_offset]
+    m3h = z_squid[:,1]**3 * z_squid[:,2]
+    m3h = np.clip(m3h, 1e-4,1-1e-4)
+    z[:,0,1] = np.log(m3h/(1.0-m3h))     # Na open fraction
 
-    # Initialize conductance values with MCMC to match the observed voltage...
-    # body.resample(t, z[:,0,:])
-    # resample_body(body, t, z[:,0,:], sigmas[0])
-    #
-    # if z0 is None:
-    #     # Sample the latent state sequence with the given initial condition
-    #     for i in np.arange(0,T-1):
-    #         # The interface kinda sucks. We have to tell it that
-    #         # the first particle is always its ancestor
-    #         prop.sample_next(z, i, np.array([0], dtype=np.int32))
+    n4 = z_squid[:,3]**4
+    n4 = np.clip(n4, 1e-4,1-1e-4)
+    z[:,0,2] = np.log(n4/(1.0-n4))       # Kdr open fraction
 
 
     # Prepare the particle Gibbs sampler with the first particle
@@ -274,6 +202,9 @@ def sample_z_given_x(t, x, inpt,
     gp2_ax, im2, l_gp2 = gp2.plot(ax=gp2_ax, data=z[:,0,:])
     axs, lines = body.plot(t, z[:,0,:], color='b', axs=axs)
     axs[0].plot(t, x[:,0], 'r')
+
+    # Plot a sample from the model
+    lpred = axs[0].plot(t, sample_from_model(T,D, init, prop)[:,0], 'g')
 
     # Update figures
     for i in range(1,4):
@@ -288,24 +219,26 @@ def sample_z_given_x(t, x, inpt,
     for s in range(1,S):
         print "Iteration %d" % s
         # Reinitialize with the previous particle
-        pf.initialize(init, prop, lkhd, x, z_smpls[s-1,:,:])
+        # pf.initialize(init, prop, lkhd, x, z_smpls[s-1,:,:])
 
         # Sample a new trajectory given the updated kinetics and the previous sample
-        z_smpls[s,:,:] = pf.sample()
+        # z_smpls[s,:,:] = pf.sample()
+        z_smpls[s,:,:] = z_smpls[s-1,:,:]
 
         # Resample the GP
         gp1.resample(z_smpls[s,:,:], dt)
         gp2.resample(z_smpls[s,:,:], dt)
 
         # Resample the conductances
-        resample_body(body,  t, z_smpls[s,:,:], sigmas[0])
-
-        # TODO: Resample conductances and noise levels
+        # resample_body(body,  t, z_smpls[s,:,:], sigmas[0])
 
         # Plot the sample
         body.plot(t, z_smpls[s,:,:], lines=lines)
         gp1.plot(im=im1, l=l_gp1, data=z_smpls[s,:,:])
         gp2.plot(im=im2, l=l_gp2, data=z_smpls[s,:,:])
+
+        # Sample from the model and plot
+        lpred[0].set_data(t, sample_from_model(T,D, init,prop)[:,0])
 
         # Update figures
         for i in range(1,4):
@@ -324,73 +257,8 @@ def sample_z_given_x(t, x, inpt,
 
     return z_smpls
 
-from hips.inference.mh import mh
-def resample_body(body, ts=[], datas=[], sigma=1.0):
-        """
-        Resample the conductances of this neuron.
-        """
-        assert isinstance(datas, list) or isinstance(datas, np.ndarray)
-        if isinstance(datas, np.ndarray):
-            datas = [datas]
-
-        if isinstance(ts, np.ndarray):
-            ts = [ts]
-
-        Is = []
-        dV_dts = []
-        # Compute I and dV_dt for each dataset
-        for t,data in zip(ts, datas):
-            # Compute dV dt
-            T = data.shape[0]
-            V = data[:,body.x_offset]
-            dV_dt = (V[1:] - V[:-1])/(t[1:] - t[:-1])
-            dV_dts.append(dV_dt[:,None])
-
-            # Compute the (unscaled) currents through each channel
-            I = np.empty((T-1, len(body.children)))
-            for m,c in enumerate(body.children):
-                for i in range(T-1):
-                    I[i,m] = c.current(data[:,None,:].copy('C'), V[i], i, 0)
-            Is.append(I)
-
-        # Concatenate values from all datasets
-        dV_dt = np.vstack(dV_dts)
-        I = np.vstack(Is)
-
-        # Now do a nonnegative regression of dVdt onto I
-        gs = 0.1 * np.ones(len(body.children))
-        perm = np.random.permutation(len(body.children))
-
-        # Define a helper function to compute the log likelihood and make MH proposals
-        def _logp(m, gm):
-            gtmp = gs.copy()
-            gtmp[m] = gm
-            dV_dt_pred = I.dot(gtmp)
-            return (-0.5/sigma * (dV_dt_pred - dV_dt)**2).sum()
-
-        # Define a metropolis hastings proposal
-        def _q(x0, xf):
-            lx0, lxf = np.log(x0), np.log(xf)
-            return -0.5 * (lx0-lxf)**2
-
-        def _sample_q(x0):
-            lx0 = np.log(x0)
-            xf = np.exp(lx0 + np.random.randn())
-            return xf
-
-        # Sample each channel in turn
-        for m in perm:
-            gs[m] = mh(gs[m], lambda g: _logp(m, g), _q, _sample_q, steps=10)[-1]
-
-        for c,g in zip(body.children, gs):
-            c.g = g
-
-# t, z, x, inpt, st_axs, gp1_ax2, gp2_ax2 = sample_gp_model()
-# raw_input("Press enter to being sampling...\n")
-# sample_z_given_x(t, x, inpt, axs=st_axs, gp1_ax=gp1_ax2, gp2_ax=gp2_ax2, z0=None)
-
 t, z, x, inpt, st_axs = sample_squid_model()
 raw_input("Press enter to being sampling...\n")
-sample_z_given_x(t, x, inpt, axs=st_axs)
+sample_gp_given_true_z(t, x, inpt, z, axs=st_axs)
 
 
