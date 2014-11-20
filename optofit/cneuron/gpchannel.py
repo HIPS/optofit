@@ -21,7 +21,7 @@ class GPChannel(Channel):
         super(GPChannel, self).__init__(name=name)
 
         # Specify the number of parameters
-        self.n_x = 1
+        self.n_x = hypers['D']
 
         # Set the hyperparameters
         self.g = hypers['g_gp']
@@ -31,7 +31,7 @@ class GPChannel(Channel):
         # This is a function Z x V -> dZ, i.e. a 2D
         # Gaussian process regression.
         # Lay out a grid of inducing points for a sparse GP
-        self.grid = 10
+        self.grid = 5
         self.z_min = sigma_inv(0.001)
         self.z_max = sigma_inv(0.999)
         self.V_min = -80.
@@ -48,7 +48,7 @@ class GPChannel(Channel):
 
         self.kernel_z = rbf(**kernel_z_hyps)
         for n in range(1, self.n_x):
-            self.kernel_z = self.kernel_z.prod(rbf(kernel_z_hyps))
+            self.kernel_z = self.kernel_z.prod(rbf(**kernel_z_hyps), tensor=True)
 
         kernel_V_hyps = { 'input_dim' : 1,
                           'variance' : hypers['sig'],
@@ -59,17 +59,23 @@ class GPChannel(Channel):
         self.kernel = self.kernel_z.prod(self.kernel_V, tensor=True)
 
         # Initialize with a random sample from the prior
-        self.model_dzdt = False
+        self.model_dzdt = True
         if self.model_dzdt:
             m = np.zeros(self.Z.shape[0])
         else:
             m = self.Z[:,0]
         C = self.kernel.K(self.Z)
-        self.h = np.random.multivariate_normal(m, C, 1).T
 
-        # Create a sparse GP model with the sampled function h
-        # This will be used for prediction
-        self.gp = SparseGPRegression(self.Z, self.h, self.kernel, Z=self.Z)
+        self.hs = []
+        self.gps = []
+
+        for d in range(self.n_x):
+            # Sample the function value at the inducing points
+            self.hs.append(np.random.multivariate_normal(m, C, 1).T)
+
+            # Create a sparse GP model with the sampled function h
+            # This will be used for prediction
+            self.gps.append(SparseGPRegression(self.Z, self.hs[d], self.kernel, Z=self.Z))
 
 
     def steady_state(self, x0):
@@ -78,12 +84,10 @@ class GPChannel(Channel):
         # TODO: Set the steady state
         x0[self.x_offset] = sigma_inv(0.005)
 
-    #cpdef double current(self, double[:,:,::1] x, double V, int t, int n):
     def current(self, x, V, t, n):
         """
         Evaluate the instantaneous current through this channel
         """
-        #cdef double z = x[t,n,self.x_offset]
         z = x[t,n,self.x_offset]
         return sigma(z) * (V - self.E)
 
@@ -102,20 +106,21 @@ class GPChannel(Channel):
         for s in range(S):
             t = ts[s]
             V = x[t,:,self.parent_compartment.x_offset]
-            z = x[t,:,self.x_offset]
-            zz = np.hstack((np.reshape(z,(N,1)), np.reshape(V, (N,1))))
+            z = x[t,:,self.x_offset:self.x_offset+self.n_x]
+            zz = np.hstack((np.reshape(z,(N,self.n_x)), np.reshape(V, (N,1))))
 
             # Sample from the GP kinetics model
-            m_pred, v_pred, _, _ = self.gp.predict(zz)
+            for d in range(self.n_x):
+                m_pred, v_pred, _, _ = self.gps[d].predict(zz)
 
-            if self.model_dzdt:
-                dxdt[t,:,self.x_offset] = m_pred[:,0]
-            else:
-                dxdt[t,:,self.x_offset] = m_pred[:,0] - z
+                if self.model_dzdt:
+                    dxdt[t,:,self.x_offset+d] = m_pred[:,0]
+                else:
+                    dxdt[t,:,self.x_offset+d] = m_pred[:,0] - z[:,d]
 
         return dxdt
 
-    def _compute_regression_data(self, datas, dts):
+    def _compute_regression_data(self, datas, dts, d=0):
         # Make sure d is a list
         assert isinstance(datas, list) or isinstance(datas, np.ndarray)
         if isinstance(datas, np.ndarray):
@@ -131,17 +136,17 @@ class GPChannel(Channel):
         Xs = []
         Ys = []
         for data, dt in zip(datas, dts):
-            z = data[:,self.x_offset][:,None]
+            z = data[:,self.x_offset:self.x_offset+self.n_x]
             v = data[:,self.parent_compartment.x_offset][:,None]
 
             Xs.append(np.hstack((z[:-1,:],v[:-1,:])))
 
             if self.model_dzdt:
                 ddt = dt.reshape((z.shape[0]-1, 1))
-                dz = (z[1:,:] - z[:-1,:]) / ddt
+                dz = (z[1:,d:d+1] - z[:-1,d:d+1]) / ddt
                 Ys.append(dz)
             else:
-                Ys.append(z[1:,:])
+                Ys.append(z[1:,d:d+1])
 
         X = np.vstack(Xs)
         Y = np.vstack(Ys)
@@ -152,45 +157,50 @@ class GPChannel(Channel):
         """
         Resample the dynamics function given a list of inferred voltage and state trajectories
         """
-        # Compute the regression data with dt
-        # TODO Incorporate transition noise
-        X,Y = self._compute_regression_data(data, dt)
+        for d in range(self.n_x):
+            # Compute the regression data with dt
+            # TODO Incorporate transition noise
+            X,Y = self._compute_regression_data(data, dt, d=d)
 
-        # Set up the sparse GP regression model with the sampled inputs and outputs
-        gpr = SparseGPRegression(X, Y, self.kernel, Z=self.Z)
-        # gpr = GPRegression(X, Y, self.kernel)
+            # Set up the sparse GP regression model with the sampled inputs and outputs
+            gpr = SparseGPRegression(X, Y, self.kernel, Z=self.Z)
+            # gpr = GPRegression(X, Y, self.kernel)
 
+            # HACK: Rather than using a truly nonparametric approach, just sample
+            # the GP at the grid of inducing points and interpolate at the GP mean
+            h = gpr.posterior_samples_f(self.Z, size=1)
 
-        # HACK: Rather than using a truly nonparametric approach, just sample
-        # the GP at the grid of inducing points and interpolate at the GP mean
-        # self.h = gpr.posterior_samples_f(self.Z, size=1)
+            # HACK: Rather than sampling, just use the predicted mean. There seems to be
+            # way too much variance in the samples
+            # h,_,_,_ = gpr.predict(self.Z)
 
-        # HACK: Rather than sampling, just use the predicted mean. There seems to be
-        # way too much variance in the samples
-        self.h,_,_,_ = gpr.predict(self.Z)
+            # HACK: Recreate the GP with the sampled function h
+            gp = SparseGPRegression(self.Z, h, self.kernel, Z=self.Z)
 
-        # HACK: Recreate the GP with the sampled function h
-        self.gp = SparseGPRegression(self.Z, self.h, self.kernel, Z=self.Z)
+            self.hs[d] = h
+            self.gps[d] = gp
 
-        # import pdb; pdb.set_trace()
 
     def plot(self, ax=None, im=None, l=None, cmap=plt.cm.hot, data=[]):
+        if self.n_x > 1:
+            print "Can only plot 1D GP models"
+            return
 
         # Reshape into a 2D function image
-        h2 = self.h.reshape((self.grid,self.grid))
+        h2 = self.hs[0].reshape((self.grid,self.grid))
 
         if im is None and ax is None:
             fig = plt.figure()
             ax = fig.add_subplot(111)
 
-            im = ax.imshow(h2, extent=(self.V_min, self.V_max, self.z_max, self.z_min), cmap=cmap)
+            im = ax.imshow(h2, extent=(self.V_min, self.V_max, self.z_max, self.z_min), cmap=cmap, vmin=-3, vmax=3)
             ax.set_aspect((self.V_max-self.V_min)/(self.z_max-self.z_min))
             ax.set_ylabel('z')
             ax.set_xlabel('V')
             ax.set_title('dz_%s/dt(z,V)' % self.name)
 
         elif im is None and ax is not None:
-            im = ax.imshow(h2, extent=(self.V_min, self.V_max, self.z_max, self.z_min), cmap=cmap)
+            im = ax.imshow(h2, extent=(self.V_min, self.V_max, self.z_max, self.z_min), cmap=cmap, vmin=-3, vmax=3)
             ax.set_aspect((self.V_max-self.V_min)/(self.z_max-self.z_min))
             ax.set_ylabel('z')
             ax.set_xlabel('V')

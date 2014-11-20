@@ -1,7 +1,7 @@
 import numpy as np
 seed = np.random.randint(2**16)
-seed = 25982
-print "Seed: ", seed
+# seed = 25982
+# print "Seed: ", seed
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
@@ -23,6 +23,7 @@ hypers = {
             'V0'     : -60.0,
             'g_leak' : 0.3,
             'E_leak' : -65.0,
+            'D'      : 1,
             'g_gp'   : 1.0,
             'E_gp'   : 0.0,
             'sig'    : 1.0,
@@ -61,7 +62,7 @@ def sample_model( ):
     init = GaussianInitialDistribution(z0, 0.1**2 * np.eye(D))
 
     # Set the proposal distribution using Hodgkin Huxley dynamics
-    sigmas = 0.0001*np.ones(D)
+    sigmas = 0.001*np.ones(D)
     # Set the voltage transition dynamics to be a bit noisier
     sigmas[body.x_offset] = 0.25
     prop = HodgkinHuxleyProposal(T, 1, D, body,  sigmas, t, inpt)
@@ -127,9 +128,9 @@ def sample_z_given_x(t, x, inpt,
     init = GaussianInitialDistribution(ss, 0.1**2 * np.eye(D))
 
     # Set the proposal distribution using Hodgkin Huxley dynamics
-    sigmas = 0.0001*np.ones(D)
+    sigmas = 0.1*np.ones(D)
     # Set the voltage transition dynamics to be a bit noisier
-    sigmas[body.x_offset] = 0.25
+    sigmas[body.x_offset] = 0.1
     prop = HodgkinHuxleyProposal(T, N_particles, D, body,  sigmas, t, inpt)
 
     # Set the observation model to observe only the voltage
