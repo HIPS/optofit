@@ -4,14 +4,24 @@ import numpy as np
 
 from channels import Channel
 
+from GPy.core.sparse_gp import SparseGP
 from GPy.models import SparseGPRegression, GPRegression
 from GPy.kern import rbf
-
+from GPy.likelihoods import Gaussian
 
 import matplotlib.pyplot as plt
 
 sigma = lambda x: 1./(1+np.exp(-x))
 sigma_inv = lambda x: np.log(x/(1-x))
+
+class SparseGPWithVariance(SparseGP):
+    def __init__(self, X, Y, kernel, Z, Y_variance):
+        # likelihood defaults to Gaussian
+        likelihood = Gaussian(Y, variance=Y_variance)
+
+        SparseGP.__init__(self, X, likelihood, kernel, Z=Z)
+        self.ensure_default_constraints()
+
 
 class GPChannel(Channel):
     """
@@ -26,6 +36,7 @@ class GPChannel(Channel):
         # Set the hyperparameters
         self.g = hypers['g_gp']
         self.E = hypers['E_gp']
+        self.sigma = hypers['sigma_trans']
 
         # Create a GP Object for the dynamics model
         # This is a function Z x V -> dZ, i.e. a 2D
@@ -43,7 +54,7 @@ class GPChannel(Channel):
 
         # Create independent RBF kernels over Z and V
         kernel_z_hyps = { 'input_dim' : 1,
-                          'variance' : hypers['sig'],
+                          'variance' : hypers['sigma_kernel'],
                           'lengthscale' : (self.z_max-self.z_min)/length}
 
         self.kernel_z = rbf(**kernel_z_hyps)
@@ -51,7 +62,7 @@ class GPChannel(Channel):
             self.kernel_z = self.kernel_z.prod(rbf(**kernel_z_hyps), tensor=True)
 
         kernel_V_hyps = { 'input_dim' : 1,
-                          'variance' : hypers['sig'],
+                          'variance' : hypers['sigma_kernel'],
                           'lengthscale' : (self.V_max-self.V_min)/length}
         self.kernel_V = rbf(**kernel_V_hyps)
 
@@ -75,7 +86,7 @@ class GPChannel(Channel):
 
             # Create a sparse GP model with the sampled function h
             # This will be used for prediction
-            self.gps.append(SparseGPRegression(self.Z, self.hs[d], self.kernel, Z=self.Z))
+            self.gps.append(SparseGPWithVariance(self.Z, self.hs[d], self.kernel, self.Z, self.sigma))
 
 
     def steady_state(self, x0):
@@ -163,7 +174,7 @@ class GPChannel(Channel):
             X,Y = self._compute_regression_data(data, dt, d=d)
 
             # Set up the sparse GP regression model with the sampled inputs and outputs
-            gpr = SparseGPRegression(X, Y, self.kernel, Z=self.Z)
+            gpr = SparseGPWithVariance(X, Y, self.kernel, self.Z, self.sigma)
             # gpr = GPRegression(X, Y, self.kernel)
 
             # HACK: Rather than using a truly nonparametric approach, just sample
@@ -175,7 +186,7 @@ class GPChannel(Channel):
             # h,_,_,_ = gpr.predict(self.Z)
 
             # HACK: Recreate the GP with the sampled function h
-            gp = SparseGPRegression(self.Z, h, self.kernel, Z=self.Z)
+            gp = SparseGPWithVariance(self.Z, h, self.kernel, self.Z, self.sigma)
 
             self.hs[d] = h
             self.gps[d] = gp
