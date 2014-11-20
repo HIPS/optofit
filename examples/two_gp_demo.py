@@ -24,13 +24,15 @@ hypers = {
             'g_leak' : 0.03,
             'E_leak' : -65.0}
 
-gp1_hypers = {'sig' : 1,
-            'g_gp'   : 12.0,
-            'E_gp'   : 50.0}
+gp1_hypers = {'D': 2,
+              'sig' : 1,
+              'g_gp'   : 12.0,
+              'E_gp'   : 50.0}
 
-gp2_hypers = { 'sig' : 1,
-            'g_gp'   : 3.60,
-            'E_gp'   : -77.0}
+gp2_hypers = {'D' : 1,
+              'sig' : 1,
+              'g_gp'   : 3.60,
+              'E_gp'   : -77.0}
 
 squid_hypers = {
             'C'      : 1.0,
@@ -229,7 +231,7 @@ def sample_z_given_x(t, x, inpt,
     init = GaussianInitialDistribution(ss, 0.1**2 * np.eye(D))
 
     # Set the proposal distribution using Hodgkin Huxley dynamics
-    sigmas = 0.1*np.ones(D)
+    sigmas = 0.2*np.ones(D)
     # Set the voltage transition dynamics to be a bit noisier
     sigmas[body.x_offset] = 0.25
     prop = HodgkinHuxleyProposal(T, N_particles, D, body,  sigmas, t, inpt)
@@ -270,7 +272,7 @@ def sample_z_given_x(t, x, inpt,
     pf.initialize(init, prop, lkhd, x, z[:,0,:].copy('C'))
 
     # Plot the initial state
-    gp1_ax, im1, l_gp1 = gp1.plot(ax=gp1_ax, data=z[:,0,:])
+    # gp1_ax, im1, l_gp1 = gp1.plot(ax=gp1_ax, data=z[:,0,:])
     gp2_ax, im2, l_gp2 = gp2.plot(ax=gp2_ax, data=z[:,0,:])
     axs, lines = body.plot(t, z[:,0,:], color='b', axs=axs)
     axs[0].plot(t, x[:,0], 'r')
@@ -304,7 +306,7 @@ def sample_z_given_x(t, x, inpt,
 
         # Plot the sample
         body.plot(t, z_smpls[s,:,:], lines=lines)
-        gp1.plot(im=im1, l=l_gp1, data=z_smpls[s,:,:])
+        # gp1.plot(im=im1, l=l_gp1, data=z_smpls[s,:,:])
         gp2.plot(im=im2, l=l_gp2, data=z_smpls[s,:,:])
 
         # Update figures
