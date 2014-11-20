@@ -59,7 +59,7 @@ class GPChannel(Channel):
         self.kernel = self.kernel_z.prod(self.kernel_V, tensor=True)
 
         # Initialize with a random sample from the prior
-        self.model_dzdt = False
+        self.model_dzdt = True
         if self.model_dzdt:
             m = np.zeros(self.Z.shape[0])
         else:

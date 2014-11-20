@@ -1,6 +1,7 @@
 import numpy as np
 seed = np.random.randint(2**16)
 # seed = 50431
+seed = 58482
 print "Seed: ", seed
 
 import matplotlib.pyplot as plt
@@ -25,7 +26,7 @@ hypers = {
             'E_leak' : -65.0}
 
 gp1_hypers = {'sig' : 1,
-            # 'g_gp'   : 12.0,
+            'g_gp'   : 12.0,
             'g_gp'   : 0.0,
             'E_gp'   : 50.0}
 
@@ -38,7 +39,7 @@ squid_hypers = {
             'V0'     : -60.0,
             'g_leak' : 0.03,
             'E_leak' : -65.0,
-            # 'g_na'   : 12.0,
+            'g_na'   : 12.0,
             'g_na'   : 0.0,
             'E_na'   : 50.0,
             'g_kdr'  : 3.60,
