@@ -31,12 +31,14 @@ class GPChannel(Channel):
         super(GPChannel, self).__init__(name=name)
 
         # Specify the number of parameters
-        self.n_x = hypers['D']
+        self.D = hypers['D']
+        # Channels are expected to have a n_x variable
+        self.n_x = self.D
 
         # Set the hyperparameters
         self.g = hypers['g_gp']
         self.E = hypers['E_gp']
-        self.sigma = hypers['sigma_trans']
+        self.sigmas = hypers['sigma_trans'] * np.ones(self.D)
 
         # Create a GP Object for the dynamics model
         # This is a function Z x V -> dZ, i.e. a 2D
@@ -49,7 +51,7 @@ class GPChannel(Channel):
         self.V_max = 50.
         length = 5.0
         self.Z = np.array(list(
-                      itertools.product(*([np.linspace(self.z_min, self.z_max, self.grid) for _ in range(self.n_x)]
+                      itertools.product(*([np.linspace(self.z_min, self.z_max, self.grid) for _ in range(self.D)]
                                         + [np.linspace(self.V_min, self.V_max, self.grid)]))))
 
         # Create independent RBF kernels over Z and V
@@ -58,7 +60,7 @@ class GPChannel(Channel):
                           'lengthscale' : (self.z_max-self.z_min)/length}
 
         self.kernel_z = rbf(**kernel_z_hyps)
-        for n in range(1, self.n_x):
+        for n in range(1, self.D):
             self.kernel_z = self.kernel_z.prod(rbf(**kernel_z_hyps), tensor=True)
 
         kernel_V_hyps = { 'input_dim' : 1,
@@ -80,13 +82,13 @@ class GPChannel(Channel):
         self.hs = []
         self.gps = []
 
-        for d in range(self.n_x):
+        for d in range(self.D):
             # Sample the function value at the inducing points
             self.hs.append(np.random.multivariate_normal(m, C, 1).T)
 
             # Create a sparse GP model with the sampled function h
             # This will be used for prediction
-            self.gps.append(SparseGPWithVariance(self.Z, self.hs[d], self.kernel, self.Z, self.sigma))
+            self.gps.append(SparseGPWithVariance(self.Z, self.hs[d], self.kernel, self.Z, self.sigmas[d]))
 
 
     def steady_state(self, x0):
@@ -103,10 +105,7 @@ class GPChannel(Channel):
         return sigma(z) * (V - self.E)
 
     def kinetics(self, dxdt, x, inpt, ts):
-        T = x.shape[0]
         N = x.shape[1]
-        D = x.shape[2]
-        M = inpt.shape[1]
         S = ts.shape[0]
 
         # Get a pointer to the voltage of the parent compartment
@@ -117,11 +116,11 @@ class GPChannel(Channel):
         for s in range(S):
             t = ts[s]
             V = x[t,:,self.parent_compartment.x_offset]
-            z = x[t,:,self.x_offset:self.x_offset+self.n_x]
-            zz = np.hstack((np.reshape(z,(N,self.n_x)), np.reshape(V, (N,1))))
+            z = x[t,:,self.x_offset:self.x_offset+self.D]
+            zz = np.hstack((np.reshape(z,(N,self.D)), np.reshape(V, (N,1))))
 
             # Sample from the GP kinetics model
-            for d in range(self.n_x):
+            for d in range(self.D):
                 m_pred, v_pred, _, _ = self.gps[d].predict(zz)
 
                 if self.model_dzdt:
@@ -147,7 +146,7 @@ class GPChannel(Channel):
         Xs = []
         Ys = []
         for data, dt in zip(datas, dts):
-            z = data[:,self.x_offset:self.x_offset+self.n_x]
+            z = data[:,self.x_offset:self.x_offset+self.D]
             v = data[:,self.parent_compartment.x_offset][:,None]
 
             Xs.append(np.hstack((z[:-1,:],v[:-1,:])))
@@ -168,13 +167,12 @@ class GPChannel(Channel):
         """
         Resample the dynamics function given a list of inferred voltage and state trajectories
         """
-        for d in range(self.n_x):
+        for d in range(self.D):
             # Compute the regression data with dt
-            # TODO Incorporate transition noise
             X,Y = self._compute_regression_data(data, dt, d=d)
 
             # Set up the sparse GP regression model with the sampled inputs and outputs
-            gpr = SparseGPWithVariance(X, Y, self.kernel, self.Z, self.sigma)
+            gpr = SparseGPWithVariance(X, Y, self.kernel, self.Z, self.sigmas[d])
             # gpr = GPRegression(X, Y, self.kernel)
 
             # HACK: Rather than using a truly nonparametric approach, just sample
@@ -186,14 +184,49 @@ class GPChannel(Channel):
             # h,_,_,_ = gpr.predict(self.Z)
 
             # HACK: Recreate the GP with the sampled function h
-            gp = SparseGPWithVariance(self.Z, h, self.kernel, self.Z, self.sigma)
+            gp = SparseGPWithVariance(self.Z, h, self.kernel, self.Z, self.sigmas[d])
 
             self.hs[d] = h
             self.gps[d] = gp
 
+    def resample_transition_noise(self, datas=[], ts=[]):
+        """
+        Resample sigma, the transition noise variance, under an inverse gamma prior
+        """
+        raise NotImplementedError("Still need to implement gamma resampling")
+
+        # Compute the predicted state and the actual next state
+        Xs = []
+        X_preds = []
+        X_diffs = []
+        for data,t in zip(datas,ts):
+            T = data.shape[0]
+            D = data.shape[1]
+            dxdt = np.zeros((T,1,D))
+
+            # Compute kinetics with no input
+            inpt = None
+            dxdt = self.kinetics(dxdt, data, inpt, np.arange(T-1))
+            dt = np.diff(t)
+
+            # Compute predicted state given kinetics
+            X_pred = data[:-1,self.x_offset:self.x_offset+self.D] + \
+                     dxdt[:-1,self.x_offset:self.x_offset+self.D]*dt
+            X = data[1:, self.x_offset:self.x_offset+self.D]
+
+            X_diff = X_pred - X
+
+            Xs.append(X)
+            X_preds.append(X_pred)
+            X_diffs.append(X_diff)
+
+        # TODO: Resample transition noise. See Wikipedia for form of posterior of normal-gamma model
+        for d in range(self.D):
+            # self.sigmas[d] = ...
+            pass
 
     def plot(self, ax=None, im=None, l=None, cmap=plt.cm.hot, data=[]):
-        if self.n_x > 1:
+        if self.D > 1:
             print "Can only plot 1D GP models"
             return
 
