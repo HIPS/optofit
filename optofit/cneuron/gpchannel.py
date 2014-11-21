@@ -38,7 +38,9 @@ class GPChannel(Channel):
         # Set the hyperparameters
         self.g = hypers['g_gp']
         self.E = hypers['E_gp']
-        self.sigmas = hypers['sigma_trans'] * np.ones(self.D)
+        self.a0 = hypers['alpha_0']
+        self.b0 = hypers['beta_0']
+        self.sigmas = (self.a0/self.b0) * np.ones(self.D)
 
         # Create a GP Object for the dynamics model
         # This is a function Z x V -> dZ, i.e. a 2D
@@ -105,6 +107,7 @@ class GPChannel(Channel):
         return sigma(z) * (V - self.E)
 
     def kinetics(self, dxdt, x, inpt, ts):
+        #import pdb; pdb.set_trace()
         N = x.shape[1]
         S = ts.shape[0]
 
@@ -189,41 +192,47 @@ class GPChannel(Channel):
             self.hs[d] = h
             self.gps[d] = gp
 
-    def resample_transition_noise(self, datas=[], ts=[]):
+    def resample_transition_noise(self, data, t):
         """
         Resample sigma, the transition noise variance, under an inverse gamma prior
         """
-        raise NotImplementedError("Still need to implement gamma resampling")
+        #raise NotImplementedError("Still need to implement gamma resampling")
 
         # Compute the predicted state and the actual next state
         Xs = []
         X_preds = []
         X_diffs = []
-        for data,t in zip(datas,ts):
-            T = data.shape[0]
-            D = data.shape[1]
-            dxdt = np.zeros((T,1,D))
+        
+        T = data.shape[0]
+        D = data.shape[1]
+        dxdt = np.zeros((T,1,D))
+        x = np.zeros((T,1,D))
+        x[:,0,:] = data
 
-            # Compute kinetics with no input
-            inpt = None
-            dxdt = self.kinetics(dxdt, data, inpt, np.arange(T-1))
-            dt = np.diff(t)
+        # Compute kinetics with no input
+        inpt = None
+        dxdt = self.kinetics(dxdt, x, inpt, np.arange(T-1))
+        dt = np.diff(t)
+        
+        #import pdb; pdb.set_trace()
+        # Compute predicted state given kinetics
+        X_pred = data[:-1,self.x_offset:self.x_offset+self.D,] + \
+                 dxdt[:,0,:][:-1,self.x_offset:self.x_offset+self.D]*np.dot(np.ones((self.D, 1)), [dt]).T
+        X = data[1:, self.x_offset:self.x_offset+self.D]
 
-            # Compute predicted state given kinetics
-            X_pred = data[:-1,self.x_offset:self.x_offset+self.D] + \
-                     dxdt[:-1,self.x_offset:self.x_offset+self.D]*dt
-            X = data[1:, self.x_offset:self.x_offset+self.D]
-
-            X_diff = X_pred - X
-
-            Xs.append(X)
-            X_preds.append(X_pred)
-            X_diffs.append(X_diff)
+        X_diff = X_pred - X
+        
+        Xs.append(X)
+        X_preds.append(X_pred)
+        X_diffs.append(X_diff)
 
         # TODO: Resample transition noise. See Wikipedia for form of posterior of normal-gamma model
+        X_diffs = np.array(X_diffs)
         for d in range(self.D):
-            # self.sigmas[d] = ...
-            pass
+            #import pdb; pdb.set_trace()
+            alpha = self.a0 + len(X_diffs[0,:,d]) / 2.0
+            beta  = self.b0 + np.sum(X_diffs[0,:,d] ** 2) / 2.0
+            self.sigmas[d] = beta / alpha
 
     def plot(self, ax=None, im=None, l=None, cmap=plt.cm.hot, data=[]):
         if self.D > 1:

@@ -27,12 +27,18 @@ hypers = {
 gp1_hypers = {'D': 2,
               'sig' : 1,
               'g_gp'   : 12.0,
-              'E_gp'   : 50.0}
+              'E_gp'   : 50.0,
+              'alpha_0': 1.0,
+              'beta_0' : 2.0,
+              'sigma_kernel': 2.0}
 
 gp2_hypers = {'D' : 1,
               'sig' : 1,
               'g_gp'   : 3.60,
-              'E_gp'   : -77.0}
+              'E_gp'   : -77.0,
+              'alpha_0': 1.0,
+              'beta_0' : 2.0,
+              'sigma_kernel': 2.0}
 
 squid_hypers = {
             'C'      : 1.0,
@@ -302,7 +308,12 @@ def sample_z_given_x(t, x, inpt,
         # Resample the conductances
         resample_body(body,  t, z_smpls[s,:,:], sigmas[0])
 
-        # TODO: Resample conductances and noise levels
+        # Resample the noise levels
+        #import pdb; pdb.set_trace()
+        gp1.resample_transition_noise(z_smpls[s, :, :], t)
+        gp2.resample_transition_noise(z_smpls[s, :, :], t)
+
+        # TODO: Resample conductances and noise levels <-- done?
 
         # Plot the sample
         body.plot(t, z_smpls[s,:,:], lines=lines)
