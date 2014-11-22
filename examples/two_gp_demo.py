@@ -417,20 +417,14 @@ def initial_latent_trace(body, inpt, voltage, t):
     T      = I_true.shape[0]
     gs     = np.diag([c.g for c in body.children])
     D      = int(sum([c.D for c in body.children]))
-    
-    driving_voltage = np.dot(np.ones((D, 1)), np.array([voltage]))[:, :T]
 
-    dim_in_child = 0
+    driving_voltage = np.dot(np.ones((len(body.children), 1)), np.array([voltage]))[:, :T]
+
     child_i      = 0
     for i in range(D):
-        if(dim_in_child < body.children[child_i].D):
-            driving_voltage[i, :] = voltage[:T] - body.children[child_i].E
+        driving_voltage[i, :] = voltage[:T] - body.children[child_i].E
 
-        if(dim_in_child < body.children[child_i].D - 1):
-            dim_in_child += 1
-        else:
-            child_i      += 1
-            dim_in_child  = 0
+    
     
     K = np.array([[max(i-j, 0) for i in range(T)] for j in range(T)])
     K = K.T + K
@@ -444,23 +438,50 @@ def initial_latent_trace(body, inpt, voltage, t):
     batch_size = 500
     learn = .00001
 
-    driving_voltage = driving_voltage.transpose()
-
     batcher = kayak.Batcher(batch_size, N)
     
-    inputs  = kayak.Inputs(driving_voltage, batcher)
+    inputs  = kayak.Parameter(driving_voltage)
     targets = kayak.Targets(np.array([I_true]), batcher)
     
-    initial_latent = np.random.randn(D, T)
-    latent_trace   = kayak.Parameter(initial_latent)
     g_params       = kayak.Parameter(gs)
     I_input        = kayak.Parameter(inpt.T[:, :T])
     Kinv           = kayak.Parameter(np.dot(Linv.transpose(), Linv))
 
-    sigmoid   = kayak.Logistic(latent_trace)
-    I_ionic   = kayak.MatMult(
-        kayak.MatMult(inputs, g_params),
+    initial_latent = np.random.randn(D, T)
+    latent_trace   = kayak.Parameter(initial_latent)
+    sigmoid        = kayak.Logistic(latent_trace)
+
+    quadratic = kayak.ElemMult(
+        sigmoid,
+        kayak.MatMult(
+            kayak.Parameter(np.array([[0, 1, 0],
+                                      [0, 0, 0],
+                                      [0, 0, 0]])),
+            sigmoid
+        )
+    )
+    three_quadratic = kayak.MatMult(
+        kayak.Parameter(np.array([[0, 0, 0],
+                                  [1, 0, 0],
+                                  [0, 0, 0]])),
+        quadratic
+    )
+    linear = kayak.MatMult(
+        kayak.Parameter(np.array([[0, 0, 0],
+                                  [0, 0, 0],
+                                  [0, 0, 1]])),
         sigmoid
+    )
+    import pdb; pdb.set_trace()
+    leak_open      = kayak.Parameter(np.vstack((np.ones((1, T)), np.ones((2, T)))))
+    open_fractions = kayak.ElemAdd(leak_open, kayak.ElemAdd(three_quadratic, linear))
+
+    I_ionic   = kayak.MatMult(
+        kayak.Parameter(np.array([[1, 1, 1]])),
+        kayak.ElemMult(
+            kayak.MatMult(g_params, inputs),
+            open_fractions
+        )
     )
 
     predicted = kayak.MatAdd(I_ionic, I_input)
