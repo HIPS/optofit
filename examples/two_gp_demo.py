@@ -436,7 +436,7 @@ def initial_latent_trace(body, inpt, voltage, t):
 
     N = 1
     batch_size = 500
-    learn = .00001
+    learn = .0000001
 
     batcher = kayak.Batcher(batch_size, N)
     
@@ -472,7 +472,7 @@ def initial_latent_trace(body, inpt, voltage, t):
                                   [0, 0, 1]])),
         sigmoid
     )
-    import pdb; pdb.set_trace()
+    
     leak_open      = kayak.Parameter(np.vstack((np.ones((1, T)), np.ones((2, T)))))
     open_fractions = kayak.ElemAdd(leak_open, kayak.ElemAdd(three_quadratic, linear))
 
@@ -489,7 +489,7 @@ def initial_latent_trace(body, inpt, voltage, t):
     nll = kayak.ElemPower(predicted - targets, 2)
           
     hack_vec = kayak.Parameter(np.array([1, 0, 0, 0, 1, 0, 0, 0, 1]))
-    kyk_loss = kayak.MatSum(nll) + kayak.MatMult(
+    kyk_loss = kayak.MatSum(nll) + 10 * kayak.MatMult(
         kayak.Reshape(
             kayak.MatMult(
                 kayak.MatMult(latent_trace, Kinv),
@@ -501,12 +501,12 @@ def initial_latent_trace(body, inpt, voltage, t):
     )
 
     grad = kyk_loss.grad(latent_trace)
-    for ii in xrange(5000):
+    for ii in xrange(50000):
         for batch in batcher:
             loss = kyk_loss.value
             if ii % 100 == 0:
                 print loss, np.sum(np.power(predicted.value - I_true, 2)) / 1000
-            grad = kyk_loss.grad(latent_trace) + .2 * grad
+            grad = kyk_loss.grad(latent_trace) + .5 * grad
             latent_trace.value -= learn * grad
 
     return sigmoid.value
