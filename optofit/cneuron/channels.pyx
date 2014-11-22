@@ -37,6 +37,7 @@ cdef class LeakChannel(Channel):
         # TODO: Use distributions to set the hypers?
         self.g = hypers['g_leak']
         self.E = hypers['E_leak']
+        self.D = 0
 
     cpdef double current(self, double[:,:,::1] x, double V, int t, int n):
         """

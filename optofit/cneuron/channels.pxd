@@ -20,6 +20,7 @@ cdef class Channel(Component):
     cpdef double current(self, double[:,:,::1] x, double V, int t, int n)
 
 cdef class LeakChannel(Channel):
+    cdef public double D
     pass
 
 cdef class NaChannel(Channel):
