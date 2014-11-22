@@ -15,6 +15,7 @@ from hips.inference.particle_mcmc import *
 from optofit.cinference.pmcmc import *
 
 import kayak
+import scipy
 
 # Set the random seed for reproducibility
 np.random.seed(seed)
@@ -432,11 +433,12 @@ def initial_latent_trace(body, inpt, voltage, t):
             dim_in_child  = 0
     
     K = np.array([[max(i-j, 0) for i in range(T)] for j in range(T)])
-    K *= .01
-    K = K ** 2
-    K = K + K.T
+    K = K.T + K
+    K = -1*(K ** 2)
     K = np.exp(K / 2)
-    Kinv = np.linalg.inv(K)
+    
+    L = np.linalg.cholesky(K + (1e-7) * np.eye(K.shape[0]))
+    Linv = scipy.linalg.solve_triangular(L.transpose(), np.identity(K.shape[0]))
 
     N = 1
     batch_size = 500
@@ -453,6 +455,7 @@ def initial_latent_trace(body, inpt, voltage, t):
     latent_trace   = kayak.Parameter(initial_latent)
     g_params       = kayak.Parameter(gs)
     I_input        = kayak.Parameter(inpt.T[:, :T])
+    Kinv           = kayak.Parameter(np.dot(Linv.transpose(), Linv))
 
     sigmoid   = kayak.Logistic(latent_trace)
     I_ionic   = kayak.MatMult(
@@ -464,25 +467,24 @@ def initial_latent_trace(body, inpt, voltage, t):
 
     nll = kayak.ElemPower(predicted - targets, 2)
           
-    #hack_vec = kayak.Parameter(np.array([1, 0, 0, 0, 1, 0, 0, 0, 1]))
-    kyk_loss = kayak.MatSum(nll) +10* kayak.MatSum(kayak.ElemPower(latent_trace, 2))
-    """- kayak.MatMult(
+    hack_vec = kayak.Parameter(np.array([1, 0, 0, 0, 1, 0, 0, 0, 1]))
+    kyk_loss = kayak.MatSum(nll) + kayak.MatMult(
         kayak.Reshape(
             kayak.MatMult(
-                kayak.MatMult(kayak.Transpose(latent_trace), Kinv),
-                latent_trace
+                kayak.MatMult(latent_trace, Kinv),
+                kayak.Transpose(latent_trace)
             ),
             (9,)
         ),
         hack_vec
     )
-    """
 
     grad = kyk_loss.grad(latent_trace)
     for ii in xrange(5000):
         for batch in batcher:
             loss = kyk_loss.value
-            print loss, np.sum(np.power(predicted.value - I_true, 2)) / 1000
+            if ii % 100 == 0:
+                print loss, np.sum(np.power(predicted.value - I_true, 2)) / 1000
             grad = kyk_loss.grad(latent_trace) + .2 * grad
             latent_trace.value -= learn * grad
 
