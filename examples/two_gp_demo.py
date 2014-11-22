@@ -14,6 +14,9 @@ from optofit.cneuron.gpchannel import GPChannel, sigma
 from hips.inference.particle_mcmc import *
 from optofit.cinference.pmcmc import *
 
+import kayak
+import scipy
+
 # Set the random seed for reproducibility
 np.random.seed(seed)
 
@@ -27,12 +30,18 @@ hypers = {
 gp1_hypers = {'D': 2,
               'sig' : 1,
               'g_gp'   : 12.0,
-              'E_gp'   : 50.0}
+              'E_gp'   : 50.0,
+              'alpha_0': 1.0,
+              'beta_0' : 2.0,
+              'sigma_kernel': 2.0}
 
 gp2_hypers = {'D' : 1,
               'sig' : 1,
               'g_gp'   : 3.60,
-              'E_gp'   : -77.0}
+              'E_gp'   : -77.0,
+              'alpha_0': 1.0,
+              'beta_0' : 2.0,
+              'sigma_kernel': 2.0}
 
 squid_hypers = {
             'C'      : 1.0,
@@ -241,8 +250,19 @@ def sample_z_given_x(t, x, inpt,
     observed_dims = np.array([body.x_offset]).astype(np.int32)
     lkhd = PartialGaussianLikelihood(observed_dims, etas)
 
+    #import pdb; pdb.set_trace()
+
     # Initialize the latent state matrix to sample N=1 particle
     z = np.ones((T,N_particles,D)) * ss[None, None, :] + np.random.randn(T,N_particles,D) * sigmas[None, None, :]
+
+    # Set the voltage...
+    z[:, 0, body.x_offset] = x[:, body.x_offset]
+    # Set the initial latent trace
+    z[1:, 0, 1:] = initial_latent_trace(body, inpt, x[:, 0], t).transpose()
+    # Set the initial voltage
+    z[0, 0, 1:]  = np.array([0, 0, 0])
+    
+    """
     if z0 is not None:
         z[:,0,:] = z0
     else:
@@ -254,7 +274,7 @@ def sample_z_given_x(t, x, inpt,
 
             # Fix the observed voltage
             # z[i+1, 0, body.x_offset] = x[i+1, body.x_offset]
-
+    """
     # Initialize conductance values with MCMC to match the observed voltage...
     # body.resample(t, z[:,0,:])
     # resample_body(body, t, z[:,0,:], sigmas[0])
@@ -302,7 +322,12 @@ def sample_z_given_x(t, x, inpt,
         # Resample the conductances
         resample_body(body,  t, z_smpls[s,:,:], sigmas[0])
 
-        # TODO: Resample conductances and noise levels
+        # Resample the noise levels
+        #import pdb; pdb.set_trace()
+        gp1.resample_transition_noise(z_smpls[s, :, :], t)
+        gp2.resample_transition_noise(z_smpls[s, :, :], t)
+
+        # TODO: Resample conductances and noise levels <-- done?
 
         # Plot the sample
         body.plot(t, z_smpls[s,:,:], lines=lines)
@@ -386,6 +411,105 @@ def resample_body(body, ts=[], datas=[], sigma=1.0):
 
         for c,g in zip(body.children, gs):
             c.g = g
+
+def initial_latent_trace(body, inpt, voltage, t):
+    I_true = np.diff(voltage) * body.C
+    T      = I_true.shape[0]
+    gs     = np.diag([c.g for c in body.children])
+    D      = int(sum([c.D for c in body.children]))
+
+    driving_voltage = np.dot(np.ones((len(body.children), 1)), np.array([voltage]))[:, :T]
+
+    child_i      = 0
+    for i in range(D):
+        driving_voltage[i, :] = voltage[:T] - body.children[child_i].E
+
+    
+    
+    K = np.array([[max(i-j, 0) for i in range(T)] for j in range(T)])
+    K = K.T + K
+    K = -1*(K ** 2)
+    K = np.exp(K / 2)
+    
+    L = np.linalg.cholesky(K + (1e-7) * np.eye(K.shape[0]))
+    Linv = scipy.linalg.solve_triangular(L.transpose(), np.identity(K.shape[0]))
+
+    N = 1
+    batch_size = 500
+    learn = .00001
+
+    batcher = kayak.Batcher(batch_size, N)
+    
+    inputs  = kayak.Parameter(driving_voltage)
+    targets = kayak.Targets(np.array([I_true]), batcher)
+    
+    g_params       = kayak.Parameter(gs)
+    I_input        = kayak.Parameter(inpt.T[:, :T])
+    Kinv           = kayak.Parameter(np.dot(Linv.transpose(), Linv))
+
+    initial_latent = np.random.randn(D, T)
+    latent_trace   = kayak.Parameter(initial_latent)
+    sigmoid        = kayak.Logistic(latent_trace)
+
+    quadratic = kayak.ElemMult(
+        sigmoid,
+        kayak.MatMult(
+            kayak.Parameter(np.array([[0, 1, 0],
+                                      [0, 0, 0],
+                                      [0, 0, 0]])),
+            sigmoid
+        )
+    )
+    three_quadratic = kayak.MatMult(
+        kayak.Parameter(np.array([[0, 0, 0],
+                                  [1, 0, 0],
+                                  [0, 0, 0]])),
+        quadratic
+    )
+    linear = kayak.MatMult(
+        kayak.Parameter(np.array([[0, 0, 0],
+                                  [0, 0, 0],
+                                  [0, 0, 1]])),
+        sigmoid
+    )
+    import pdb; pdb.set_trace()
+    leak_open      = kayak.Parameter(np.vstack((np.ones((1, T)), np.ones((2, T)))))
+    open_fractions = kayak.ElemAdd(leak_open, kayak.ElemAdd(three_quadratic, linear))
+
+    I_ionic   = kayak.MatMult(
+        kayak.Parameter(np.array([[1, 1, 1]])),
+        kayak.ElemMult(
+            kayak.MatMult(g_params, inputs),
+            open_fractions
+        )
+    )
+
+    predicted = kayak.MatAdd(I_ionic, I_input)
+
+    nll = kayak.ElemPower(predicted - targets, 2)
+          
+    hack_vec = kayak.Parameter(np.array([1, 0, 0, 0, 1, 0, 0, 0, 1]))
+    kyk_loss = kayak.MatSum(nll) + kayak.MatMult(
+        kayak.Reshape(
+            kayak.MatMult(
+                kayak.MatMult(latent_trace, Kinv),
+                kayak.Transpose(latent_trace)
+            ),
+            (9,)
+        ),
+        hack_vec
+    )
+
+    grad = kyk_loss.grad(latent_trace)
+    for ii in xrange(5000):
+        for batch in batcher:
+            loss = kyk_loss.value
+            if ii % 100 == 0:
+                print loss, np.sum(np.power(predicted.value - I_true, 2)) / 1000
+            grad = kyk_loss.grad(latent_trace) + .2 * grad
+            latent_trace.value -= learn * grad
+
+    return sigmoid.value
 
 # t, z, x, inpt, st_axs, gp1_ax2, gp2_ax2 = sample_gp_model()
 # raw_input("Press enter to being sampling...\n")

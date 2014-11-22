@@ -1,7 +1,7 @@
 import numpy as np
 seed = np.random.randint(2**16)
-# seed = 25982
-# print "Seed: ", seed
+#seed = 25982
+print "Seed: ", seed
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
@@ -23,19 +23,16 @@ hypers = {
             'V0'     : -60.0,
             'g_leak' : 0.3,
             'E_leak' : -65.0,
+            'g_gp'   : 1.0,
+            'E_gp'   : 0.0,
+            'sig'    : 1.0,
          }
-
-gp_hypers = {'D'            : 1,
-             'g_gp'         : 1.0,
-             'E_gp'         : 0.0,
-             'sigma_kernel' : 1.0,
-             'sigma_trans'  : 0.01}
 
 def create_model():
     # Add a few channels
     body = Compartment(name='body', hypers=hypers)
     leak = LeakChannel(name='leak', hypers=hypers)
-    gp = GPChannel(name='gp', hypers=gp_hypers)
+    gp = GPChannel(name='gp', hypers=hypers)
 
     body.add_child(leak)
     body.add_child(gp)
@@ -64,7 +61,7 @@ def sample_model( ):
     init = GaussianInitialDistribution(z0, 0.1**2 * np.eye(D))
 
     # Set the proposal distribution using Hodgkin Huxley dynamics
-    sigmas = 0.001*np.ones(D)
+    sigmas = 0.0001*np.ones(D)
     # Set the voltage transition dynamics to be a bit noisier
     sigmas[body.x_offset] = 0.25
     prop = HodgkinHuxleyProposal(T, 1, D, body,  sigmas, t, inpt)
@@ -99,8 +96,7 @@ def sample_model( ):
     # Plot the GP channel dynamics
     gp_fig = plt.figure()
     gp_ax1 = gp_fig.add_subplot(121)
-    # gp.plot(ax=gp_ax1)
-    gp.plot(ax=gp_ax1, data=z)
+    gp.plot(ax=gp_ax1)
     gp_ax2 = gp_fig.add_subplot(122)
 
     # Plot the first particle trajectory
@@ -131,9 +127,9 @@ def sample_z_given_x(t, x, inpt,
     init = GaussianInitialDistribution(ss, 0.1**2 * np.eye(D))
 
     # Set the proposal distribution using Hodgkin Huxley dynamics
-    sigmas = gp_hypers['sigma_trans']*np.ones(D)
+    sigmas = 0.0001*np.ones(D)
     # Set the voltage transition dynamics to be a bit noisier
-    sigmas[body.x_offset] = 0.1
+    sigmas[body.x_offset] = 0.25
     prop = HodgkinHuxleyProposal(T, N_particles, D, body,  sigmas, t, inpt)
 
     # Set the observation model to observe only the voltage
