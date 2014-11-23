@@ -1,6 +1,6 @@
 import numpy as np
-seed = np.random.randint(2**16)
-# seed = 50431
+# seed = np.random.randint(2**16)
+seed = 2958
 print "Seed: ", seed
 
 import matplotlib.pyplot as plt
@@ -33,7 +33,7 @@ gp1_hypers = {'D': 2,
               'E_gp'   : 50.0,
               'alpha_0': 1.0,
               'beta_0' : 2.0,
-              'sigma_kernel': 2.0}
+              'sigma_kernel': 1.0}
 
 gp2_hypers = {'D' : 1,
               'sig' : 1,
@@ -41,7 +41,7 @@ gp2_hypers = {'D' : 1,
               'E_gp'   : -77.0,
               'alpha_0': 1.0,
               'beta_0' : 2.0,
-              'sigma_kernel': 2.0}
+              'sigma_kernel': 1.0}
 
 squid_hypers = {
             'C'      : 1.0,
@@ -123,7 +123,7 @@ def sample_squid_model():
     for i in np.arange(0,T-1):
         # The interface kinda sucks. We have to tell it that
         # the first particle is always its ancestor
-        prop.sample_next(z, i, np.array([0], dtype=np.int32))
+        prop.sample_next(z, i, np.zeros((N,), dtype=np.int32))
 
     # Sample observations
     for i in np.arange(0,T):
@@ -226,6 +226,7 @@ def sample_gp_model():
 # Now run the pMCMC inference
 def sample_z_given_x(t, x, inpt,
                      z0=None,
+                     initialize='constant',
                      N_particles=100,
                      axs=None, gp1_ax=None, gp2_ax=None):
     dt = np.diff(t)
@@ -255,17 +256,21 @@ def sample_z_given_x(t, x, inpt,
     # Initialize the latent state matrix to sample N=1 particle
     z = np.ones((T,N_particles,D)) * ss[None, None, :] + np.random.randn(T,N_particles,D) * sigmas[None, None, :]
 
-    # Set the voltage...
-    z[:, 0, body.x_offset] = x[:, body.x_offset]
-    # Set the initial latent trace
-    z[1:, 0, 1:] = initial_latent_trace(body, inpt, x[:, 0], t).transpose()
-    # Set the initial voltage
-    z[0, 0, 1:]  = np.array([0, 0, 0])
-    
-    """
     if z0 is not None:
-        z[:,0,:] = z0
-    else:
+        if initialize == 'ground_truth':
+            logit = lambda zz: np.log(zz/(1-zz))
+            # Fix the observed voltage
+            z[:, 0, body.x_offset] = z0[:, 0]
+            # Fix the Na latent state
+            m = z0[:,1]
+            h = z0[:,2]
+            z[:,0, gp1.x_offset] = logit(np.clip(m**3 *h, 1e-4,1-1e-4))
+            # Fix the Kdr latent state
+            n = z0[:,3]
+            z[:,0, gp2.x_offset] = logit(np.clip(n**4, 1e-4, 1-1e-4))
+        else:
+            z[:,0,:] = z0
+    elif initialize == 'from_model':
         # Sample the latent state sequence with the given initial condition
         for i in np.arange(0,T-1):
             # The interface kinda sucks. We have to tell it that
@@ -273,8 +278,19 @@ def sample_z_given_x(t, x, inpt,
             prop.sample_next(z, i, np.array([0], dtype=np.int32))
 
             # Fix the observed voltage
-            # z[i+1, 0, body.x_offset] = x[i+1, body.x_offset]
-    """
+            z[i+1, 0, body.x_offset] = x[i+1, body.x_offset]
+    elif initialize == 'optimize':
+        # By default, optimize the latent state
+        # Set the voltage...
+        z[:, 0, body.x_offset] = x[:, body.x_offset]
+        # Set the initial latent trace
+        z[1:, 0, 1:] = initial_latent_trace(body, inpt, x[:, 0], t).transpose()
+        # Set the initial voltage
+        z[0, 0, 1:]  = np.array([0, 0, 0])
+    else:
+        # Constant initialization
+        pass
+
     # Initialize conductance values with MCMC to match the observed voltage...
     # body.resample(t, z[:,0,:])
     # resample_body(body, t, z[:,0,:], sigmas[0])
@@ -286,13 +302,16 @@ def sample_z_given_x(t, x, inpt,
     #         # the first particle is always its ancestor
     #         prop.sample_next(z, i, np.array([0], dtype=np.int32))
 
+    # Resample the Gaussian processes
+    gp1.resample(z[:,0,:], dt)
+    gp2.resample(z[:,0,:], dt)
 
     # Prepare the particle Gibbs sampler with the first particle
     pf = ParticleGibbsAncestorSampling(T, N_particles, D)
     pf.initialize(init, prop, lkhd, x, z[:,0,:].copy('C'))
 
     # Plot the initial state
-    # gp1_ax, im1, l_gp1 = gp1.plot(ax=gp1_ax, data=z[:,0,:])
+    gp1_ax, im1, l_gp1 = gp1.plot(ax=gp1_ax, data=z[:,0,:])
     gp2_ax, im2, l_gp2 = gp2.plot(ax=gp2_ax, data=z[:,0,:])
     axs, lines = body.plot(t, z[:,0,:], color='b', axs=axs)
     axs[0].plot(t, x[:,0], 'r')
@@ -309,29 +328,29 @@ def sample_z_given_x(t, x, inpt,
 
     for s in range(1,S):
         print "Iteration %d" % s
+        # raw_input("Press enter to continue\n")
         # Reinitialize with the previous particle
         pf.initialize(init, prop, lkhd, x, z_smpls[s-1,:,:])
 
         # Sample a new trajectory given the updated kinetics and the previous sample
         z_smpls[s,:,:] = pf.sample()
+        print "dV: ", (z_smpls[s,:,0] - z_smpls[s-1,:,0]).mean()
 
         # Resample the GP
         gp1.resample(z_smpls[s,:,:], dt)
         gp2.resample(z_smpls[s,:,:], dt)
 
-        # Resample the conductances
-        resample_body(body,  t, z_smpls[s,:,:], sigmas[0])
 
         # Resample the noise levels
-        #import pdb; pdb.set_trace()
         gp1.resample_transition_noise(z_smpls[s, :, :], t)
         gp2.resample_transition_noise(z_smpls[s, :, :], t)
 
-        # TODO: Resample conductances and noise levels <-- done?
+        # Resample the conductances
+        # resample_body(body,  t, z_smpls[s,:,:], sigmas[0])
 
         # Plot the sample
         body.plot(t, z_smpls[s,:,:], lines=lines)
-        # gp1.plot(im=im1, l=l_gp1, data=z_smpls[s,:,:])
+        gp1.plot(im=im1, l=l_gp1, data=z_smpls[s,:,:])
         gp2.plot(im=im2, l=l_gp2, data=z_smpls[s,:,:])
 
         # Update figures
@@ -517,6 +536,7 @@ def initial_latent_trace(body, inpt, voltage, t):
 
 t, z, x, inpt, st_axs = sample_squid_model()
 raw_input("Press enter to being sampling...\n")
+# sample_z_given_x(t, x, inpt, z0=z, axs=st_axs)
 sample_z_given_x(t, x, inpt, axs=st_axs)
 
 

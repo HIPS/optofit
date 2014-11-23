@@ -26,16 +26,21 @@ hypers = {
             'E_leak' : -65.0}
 
 
-gp1_hypers = {'sig' : 1,
-            'g_gp'   : 12.0,
-            'g_gp'   : 0.0,
-            'E_gp'   : 50.0}
+gp1_hypers = {'D': 2,
+              'sig' : 1,
+              'g_gp'   : 12.0,
+              'E_gp'   : 50.0,
+              'alpha_0': 1.0,
+              'beta_0' : 2.0,
+              'sigma_kernel': 2.0}
 
-gp2_hypers = {'D' :1,
+gp2_hypers = {'D' : 1,
               'sig' : 1,
               'g_gp'   : 3.60,
-              'E_gp'   : -77.0}
-
+              'E_gp'   : -77.0,
+              'alpha_0': 1.0,
+              'beta_0' : 2.0,
+              'sigma_kernel': 2.0}
 squid_hypers = {
             'C'      : 1.0,
             'V0'     : -60.0,
