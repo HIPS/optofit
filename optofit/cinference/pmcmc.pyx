@@ -83,7 +83,7 @@ cdef class HodgkinHuxleyProposal(Proposal):
         """
         cdef int N = z.shape[1]
         cdef int D = z.shape[2]
-        cdef int n, d
+        cdef int n, d, a
 
         # Preallocate random variables
         cdef double[:,::1] rands = np.random.randn(N,D)
@@ -95,10 +95,13 @@ cdef class HodgkinHuxleyProposal(Proposal):
 
         # # TODO: Parallelize with OMP
         with nogil:
-            for n in prange(N):
+            # for n in prange(N):
+            for n in range(N):
                 for d in prange(D):
                     # Forward Euler step
-                    z[i_prev+1,n,d] = z[i_prev,n,d] + dt * self.dzdt[i_prev,n,d]
+                    # z[i_prev+1,n,d] = z[i_prev,n,d] + dt * self.dzdt[i_prev,n,d]
+                    a = ancestors[n]
+                    z[i_prev+1,n,d] = z[i_prev,a,d] + dt * self.dzdt[i_prev,a,d]
                     # Add noise
                     z[i_prev+1,n,d] += self.sigmas[d] * rands[n,d]
 
