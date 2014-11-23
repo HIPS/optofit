@@ -3,6 +3,7 @@
 # cython: boundscheck=False
 # cython: nonecheck=False
 ## cython: cdivision=True
+# cython: overflowcheck=True
 from cython.parallel import prange
 
 import numpy as np
@@ -59,6 +60,7 @@ cdef class HodgkinHuxleyProposal(Proposal):
     def __init__(self, int T, int N, int D, Component component, double[::1] sigmas, double[::1] ts, double[:,::1] inpt):
         self.component = component
         self.sigmas = sigmas
+
         self.ts = ts
         self.inpt = inpt
 
@@ -66,8 +68,8 @@ cdef class HodgkinHuxleyProposal(Proposal):
         cdef int d
         self.D = D
         self.sigma_sqs = np.zeros(self.D)
-        for d in range(self.D):
-            self.sigma_sqs[d] = self.sigmas[d]**2
+        for d in range(D):
+            self.sigma_sqs[d] = sigmas[d]**2
 
         # Allocate space for dzdt
         self.dzdt = np.empty((T,N,D))
@@ -138,6 +140,10 @@ cdef class HodgkinHuxleyProposal(Proposal):
                 for d in range(D):
                     lp[n] += -0.5/self.sigma_sqs[d] * (z_curr[d] - z_mean[d])**2
 
+    cpdef set_sigmasq(self, double[::1] sigma_sqs):
+        self.sigma_sqs = sigma_sqs
+        for d in range(self.D):
+            self.sigmas[d] = np.sqrt(sigma_sqs[d])
 
 # class TruncatedHodgkinHuxleyProposal(Proposal):
 #     def __init__(self, population, t, inpt, sigma):
@@ -283,3 +289,8 @@ cdef class PartialGaussianLikelihood(Likelihood):
             d = self.observed_dims[o]
             x[i,o] = z[i,n,d] + self.etas[o] * np.random.randn()
 
+
+    cpdef set_etasq(self, double[::1] eta_sqs):
+        self.eta_sqs = eta_sqs
+        for o in range(self.O):
+            self.etas[o] = np.sqrt(eta_sqs[o])
