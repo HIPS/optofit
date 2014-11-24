@@ -495,12 +495,14 @@ def initial_latent_trace(body, inpt, voltage, t):
     leak_open      = kayak.Parameter(np.vstack((np.ones((1, T)), np.ones((2, T)))))
     open_fractions = kayak.ElemAdd(leak_open, kayak.ElemAdd(three_quadratic, linear))
 
+    I_channels = kayak.ElemMult(
+        kayak.MatMult(g_params, inputs),
+        open_fractions
+    )
+
     I_ionic   = kayak.MatMult(
         kayak.Parameter(np.array([[1, 1, 1]])),
-        kayak.ElemMult(
-            kayak.MatMult(g_params, inputs),
-            open_fractions
-        )
+        I_channels
     )
 
     predicted = kayak.MatAdd(I_ionic, I_input)
@@ -508,7 +510,7 @@ def initial_latent_trace(body, inpt, voltage, t):
     nll = kayak.ElemPower(predicted - targets, 2)
           
     hack_vec = kayak.Parameter(np.array([1, 0, 0, 0, 1, 0, 0, 0, 1]))
-    kyk_loss = kayak.MatSum(nll) + 10 * kayak.MatMult(
+    kyk_loss = kayak.MatSum(nll) + kayak.MatMult(
         kayak.Reshape(
             kayak.MatMult(
                 kayak.MatMult(latent_trace, Kinv),
@@ -517,14 +519,14 @@ def initial_latent_trace(body, inpt, voltage, t):
             (9,)
         ),
         hack_vec
-    )
+    ) + kayak.MatSum(kayak.ElemPower(I_channels, 2))
 
     grad = kyk_loss.grad(latent_trace)
-    for ii in xrange(50000):
+    for ii in xrange(5000):
         for batch in batcher:
             loss = kyk_loss.value
             if ii % 100 == 0:
-                print loss, np.sum(np.power(predicted.value - I_true, 2)) / 1000
+                print loss, np.sum(np.power(predicted.value - I_true, 2)) / T
             grad = kyk_loss.grad(latent_trace) + .5 * grad
             latent_trace.value -= learn * grad
 
@@ -537,6 +539,6 @@ def initial_latent_trace(body, inpt, voltage, t):
 t, z, x, inpt, st_axs = sample_squid_model()
 raw_input("Press enter to being sampling...\n")
 # sample_z_given_x(t, x, inpt, z0=z, axs=st_axs)
-sample_z_given_x(t, x, inpt, axs=st_axs)
+sample_z_given_x(t, x, inpt, axs=st_axs, initialize='optimize')
 
 
