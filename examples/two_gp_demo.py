@@ -627,7 +627,7 @@ t, z, x, inpt, st_axs = sample_squid_model()
 
 raw_input("Press enter to being sampling...\n")
 # sample_z_given_x(t, x, inpt, z0=z, axs=st_axs)
-z_smpls, gp1_smpls, gp2_smpls = sample_z_given_x(t, x, inpt, N_samples=10, axs=st_axs, initialize='constant')
+z_smpls, gp1_smpls, gp2_smpls = sample_z_given_x(t, x, inpt, N_samples=100, axs=st_axs, initialize='constant')
 # sample_z_given_x(t, x, inpt, axs=st_axs, z0=z, initialize='ground_truth')
 # sample_z_given_x(t, x, inpt, axs=st_axs, initialize='optimize')
 
