@@ -1,3 +1,4 @@
+import os
 import copy
 import cPickle
 
@@ -7,7 +8,9 @@ seed = np.random.randint(2**16)
 seed = 60017
 print "Seed: ", seed
 
-
+if "DISPLAY" not in os.environ:
+    import matplotlib
+    matplotlib.use('Agg')
 
 import matplotlib.pyplot as plt
 
