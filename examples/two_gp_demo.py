@@ -36,7 +36,8 @@ gp1_hypers = {'D': 2,
 
 gp2_hypers = {'D' : 1,
               'sig' : 1,
-              'g_gp'   : 3.60,
+              # 'g_gp'   : 3.60,
+              'g_gp'   : 0,
               'E_gp'   : -77.0,
               'alpha_0': 1.0,
               'beta_0' : 2.0,
@@ -47,7 +48,8 @@ squid_hypers = {
             'V0'     : -60.0,
             'g_leak' : 0.03,
             'E_leak' : -65.0,
-            'g_na'   : 12.0,
+            # 'g_na'   : 12.0,
+            'g_na'   : 0.0,
             'E_na'   : 50.0,
             'g_kdr'  : 3.60,
             'E_kdr'  : -77.0
@@ -240,9 +242,10 @@ def sample_z_given_x(t, x, inpt,
     init = GaussianInitialDistribution(ss, 0.1**2 * np.eye(D))
 
     # Set the proposal distribution using Hodgkin Huxley dynamics
-    sigmas = 0.2*np.ones(D)
+    sigmas = np.ones(D)
+    # sigmas = 0.2*np.ones(D)
     # Set the voltage transition dynamics to be a bit noisier
-    sigmas[body.x_offset] = 0.25
+    # sigmas[body.x_offset] = 0.25
     prop = HodgkinHuxleyProposal(T, N_particles, D, body,  sigmas, t, inpt)
 
     # Set the observation model to observe only the voltage
@@ -603,8 +606,8 @@ def initial_latent_trace(body, inpt, voltage, t):
     return sigmoid.value
 
 # Sample data from either a GP model or a squid compartment
-t, z, x, inpt, st_axs = sample_gp_model()
-# t, z, x, inpt, st_axs = sample_squid_model()
+# t, z, x, inpt, st_axs = sample_gp_model()
+t, z, x, inpt, st_axs = sample_squid_model()
 
 raw_input("Press enter to being sampling...\n")
 # sample_z_given_x(t, x, inpt, z0=z, axs=st_axs)
