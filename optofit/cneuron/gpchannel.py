@@ -5,6 +5,8 @@ import numpy as np
 from channels import Channel
 
 from GPy.core.sparse_gp import SparseGP
+from GPy.core.gp import GP
+
 from GPy.models import SparseGPRegression, GPRegression
 from GPy.kern import rbf
 from GPy.likelihoods import Gaussian
@@ -13,6 +15,14 @@ import matplotlib.pyplot as plt
 
 sigma = lambda x: 1./(1+np.exp(-x))
 sigma_inv = lambda x: np.log(x/(1-x))
+
+class GPWithVariance(GP):
+    def __init__(self, X, Y, kernel,  Y_variance):
+        # likelihood defaults to Gaussian
+        likelihood = Gaussian(Y, variance=Y_variance)
+
+        GP.__init__(self, X, likelihood, kernel)
+        self.ensure_default_constraints()
 
 class SparseGPWithVariance(SparseGP):
     def __init__(self, X, Y, kernel,  Y_variance, Z=None, num_inducing=25):
@@ -189,8 +199,10 @@ class GPChannel(Channel):
             X,Y = self._compute_regression_data(data, dt, d=d)
 
             # Set up the sparse GP regression model with the sampled inputs and outputs
-            gpr = SparseGPWithVariance(X, Y, self.kernel, self.sigmas[d], num_inducing=25)
+            gpr = SparseGPWithVariance(X, Y, self.kernel, self.sigmas[d], num_inducing=100)
+            # gpr = GPWithVariance(X, Y, self.kernel, self.sigmas[d])
             # gpr = GPRegression(X, Y, self.kernel)
+
 
             # HACK: Rather than using a truly nonparametric approach, just sample
             # the GP at the grid of inducing points and interpolate at the GP mean
@@ -201,14 +213,11 @@ class GPChannel(Channel):
             # h,_,_,_ = gpr.predict(self.Z)
 
             # HACK: Recreate the GP with the sampled function h
-            gp = SparseGPWithVariance(self.Z, h, self.kernel, self.sigmas[d], num_inducing=25)
-
-            # if self.name == 'gpk':
-            #     import pdb; pdb.set_trace()
-            #     gpr.plot()
+            gp = SparseGPWithVariance(self.Z, h, self.kernel, self.sigmas[d], num_inducing=100)
 
             self.hs[d] = h
             self.gps[d] = gp
+            # self.gps[d] = gpr
 
     def set_sigmas(self, sigmas):
         for d in range(self.D):
