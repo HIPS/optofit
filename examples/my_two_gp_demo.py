@@ -70,7 +70,7 @@ def create_gp_model():
 
     return body, gp1, gp2, D, I
 
-def sample_squid_model():
+def sample_squid_model(start = 20, stop = 80, intensity = 7.):
     squid_body = SquidCompartment(name='body', hypers=squid_hypers)
     # squid_body = Compartment(name='body', hypers=squid_hypers)
     # leak = LeakChannel(name='leak', hypers=squid_hypers)
@@ -538,7 +538,6 @@ def initial_latent_trace(body, inpt, voltage, t):
 
 t, z, x, inpt, st_axs = sample_squid_model()
 raw_input("Press enter to being sampling...\n")
-# sample_z_given_x(t, x, inpt, z0=z, axs=st_axs)
 sample_z_given_x(t, x, inpt, axs=st_axs, initialize='optimize')
 
 
