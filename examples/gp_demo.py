@@ -23,16 +23,23 @@ hypers = {
             'V0'     : -60.0,
             'g_leak' : 0.3,
             'E_leak' : -65.0,
-            'g_gp'   : 1.0,
-            'E_gp'   : 0.0,
-            'sig'    : 1.0,
+
          }
+
+gp_hypers = {
+                'D'      : 1,
+                'g_gp'   : 1.0,
+                'E_gp'   : 0.0,
+                'alpha_0': 1.0,
+                'beta_0' : 2.0,
+                'sigma_kernel': 1.0
+}
 
 def create_model():
     # Add a few channels
     body = Compartment(name='body', hypers=hypers)
     leak = LeakChannel(name='leak', hypers=hypers)
-    gp = GPChannel(name='gp', hypers=hypers)
+    gp = GPChannel(name='gp', hypers=gp_hypers)
 
     body.add_child(leak)
     body.add_child(gp)
@@ -169,6 +176,11 @@ def sample_z_given_x(t, x, inpt,
         # Sample a new trajectory given the updated kinetics and the previous sample
         z_smpls[s,:,:] = pf.sample()
 
+        sigmasq = resample_transition_noise(body, z_smpls[s,:,:], inpt, t)
+        print "Sigmasq: ", sigmasq
+        prop.set_sigmasq(sigmasq)
+        gp.set_sigmas(sigmasq)
+
         # Plot the sample
         body.plot(t, z_smpls[s,:,:], lines=lines)
 
@@ -195,6 +207,40 @@ def sample_z_given_x(t, x, inpt,
     plt.show()
 
     return z_smpls
+
+def resample_transition_noise(body, data, inpt, t,
+                              alpha0=0.1, beta0=0.1):
+    """
+    Resample sigma, the transition noise variance, under an inverse gamma prior
+    """
+    T = data.shape[0]
+    D = data.shape[1]
+    dxdt = np.zeros((T,1,D))
+    x = np.zeros((T,1,D))
+    x[:,0,:] = data
+
+    # Compute kinetics of the voltage
+    body.kinetics(dxdt, x, inpt, np.arange(T-1).astype(np.int32))
+    dt = np.diff(t)
+    # TODO: Loop over data
+    dX_pred = dxdt[:-1, 0, :]
+    dX_data = (data[1:, :] - data[:-1, :]) / dt[:,None]
+    X_diffs = dX_pred - dX_data
+
+    # Resample transition noise.
+    X_diffs = np.array(X_diffs)
+    n = X_diffs.shape[0]
+
+    sigmasq = np.zeros(D)
+    for d in range(D):
+        alpha = alpha0 + n / 2.0
+        beta  = beta0 + np.sum(X_diffs[:,d] ** 2) / 2.0
+        # self.sigmas[d] = beta / alpha
+        sigmasq[d] = 1.0 / np.random.gamma(alpha, 1.0/beta)
+
+    # print "Sigma V: %.3f" % (sigmas[d])
+    return sigmasq
+
 
 t, z, x, inpt, axs, gp_ax = sample_model()
 

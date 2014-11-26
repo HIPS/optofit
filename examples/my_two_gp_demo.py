@@ -1,10 +1,18 @@
+import os
+import copy
+import cPickle
+
 import numpy as np
-# seed = np.random.randint(2**16)
-seed = 2958
+seed = np.random.randint(2**16)
+# seed = 2958
+seed = 60017
 print "Seed: ", seed
 
+if "DISPLAY" not in os.environ:
+    import matplotlib
+    matplotlib.use('Agg')
+
 import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon
 
 from optofit.cneuron.compartment import Compartment, SquidCompartment
 from optofit.cneuron.channels import LeakChannel, NaChannel, KdrChannel
@@ -38,6 +46,7 @@ gp1_hypers = {'D': 2,
 gp2_hypers = {'D' : 1,
               'sig' : 1,
               'g_gp'   : 3.60,
+              # 'g_gp'   : 0,
               'E_gp'   : -77.0,
               'alpha_0': 1.0,
               'beta_0' : 2.0,
@@ -49,6 +58,7 @@ squid_hypers = {
             'g_leak' : 0.03,
             'E_leak' : -65.0,
             'g_na'   : 12.0,
+            # 'g_na'   : 0.0,
             'E_na'   : 50.0,
             'g_kdr'  : 3.60,
             'E_kdr'  : -77.0
@@ -85,14 +95,16 @@ def sample_squid_model(start = 20, stop = 80, intensity = 7.):
 
     # Set the recording duration
     t_start = 0
-    t_stop = 100.
+    t_stop = 300.
     dt = 0.1
     t = np.arange(t_start, t_stop, dt)
     T = len(t)
 
     # Make input with an injected current from 500-600ms
     inpt = np.zeros((T, I))
-    inpt[20/dt:80/dt,:] = 7.
+    inpt[20/dt:40/dt,:] = 3.
+    inpt[120/dt:160/dt,:] = 5.
+    inpt[220/dt:280/dt,:] = 7.
     inpt += np.random.randn(T, I)
 
     # Set the initial distribution to be Gaussian around the steady state
@@ -207,27 +219,28 @@ def sample_gp_model():
     st_axs[0].plot(t, x[:,0], 'r')
 
     # Plot the GP channel dynamics
-    gp1_fig = plt.figure()
-    gp1_ax1 = gp1_fig.add_subplot(121)
-    gp1.plot(ax=gp1_ax1)
-    gp1_ax2 = gp1_fig.add_subplot(122)
-
-    gp2_fig = plt.figure()
-    gp2_ax1 = gp2_fig.add_subplot(121)
-    gp2.plot(ax=gp2_ax1)
-    gp2_ax2 = gp2_fig.add_subplot(122)
+    # gp1_fig = plt.figure()
+    # gp1_ax1 = gp1_fig.add_subplot(121)
+    # gp1.plot(ax=gp1_ax1)
+    # gp1_ax2 = gp1_fig.add_subplot(122)
+    #
+    # gp2_fig = plt.figure()
+    # gp2_ax1 = gp2_fig.add_subplot(121)
+    # gp2.plot(ax=gp2_ax1)
+    # gp2_ax2 = gp2_fig.add_subplot(122)
 
     plt.ion()
     plt.show()
     plt.pause(0.01)
 
-    return t, z, x, inpt, st_axs, gp1_ax2, gp2_ax2
+    return t, z, x, inpt, st_axs
 
 # Now run the pMCMC inference
 def sample_z_given_x(t, x, inpt,
                      z0=None,
                      initialize='constant',
-                     N_particles=100,
+                     N_particles=1000,
+                     N_samples=100,
                      axs=None, gp1_ax=None, gp2_ax=None):
     dt = np.diff(t)
     T,O = x.shape
@@ -241,17 +254,16 @@ def sample_z_given_x(t, x, inpt,
     init = GaussianInitialDistribution(ss, 0.1**2 * np.eye(D))
 
     # Set the proposal distribution using Hodgkin Huxley dynamics
+    # sigmas = np.ones(D)
     sigmas = 0.2*np.ones(D)
     # Set the voltage transition dynamics to be a bit noisier
-    sigmas[body.x_offset] = 0.25
+    # sigmas[body.x_offset] = 0.25
     prop = HodgkinHuxleyProposal(T, N_particles, D, body,  sigmas, t, inpt)
 
     # Set the observation model to observe only the voltage
     etas = np.ones(1)
     observed_dims = np.array([body.x_offset]).astype(np.int32)
     lkhd = PartialGaussianLikelihood(observed_dims, etas)
-
-    #import pdb; pdb.set_trace()
 
     # Initialize the latent state matrix to sample N=1 particle
     z = np.ones((T,N_particles,D)) * ss[None, None, :] + np.random.randn(T,N_particles,D) * sigmas[None, None, :]
@@ -303,8 +315,8 @@ def sample_z_given_x(t, x, inpt,
     #         prop.sample_next(z, i, np.array([0], dtype=np.int32))
 
     # Resample the Gaussian processes
-    gp1.resample(z[:,0,:], dt)
-    gp2.resample(z[:,0,:], dt)
+    # gp1.resample(z[:,0,:], dt)
+    # gp2.resample(z[:,0,:], dt)
 
     # Prepare the particle Gibbs sampler with the first particle
     pf = ParticleGibbsAncestorSampling(T, N_particles, D)
@@ -322,11 +334,16 @@ def sample_z_given_x(t, x, inpt,
         plt.pause(0.001)
 
     # Initialize sample outputs
-    S = 1000
-    z_smpls = np.zeros((S,T,D))
+    z_smpls = np.zeros((N_samples,T,D))
     z_smpls[0,:,:] = z[:,0,:]
+    gp1_smpls = []
+    gp2_smpls = []
+    # Resample observation noise
+    # eta_sqs = resample_observation_noise(z_smpls[0,:,:], x)
+    # lkhd.set_etasq(eta_sqs)
 
-    for s in range(1,S):
+
+    for s in range(1,N_samples):
         print "Iteration %d" % s
         # raw_input("Press enter to continue\n")
         # Reinitialize with the previous particle
@@ -334,16 +351,26 @@ def sample_z_given_x(t, x, inpt,
 
         # Sample a new trajectory given the updated kinetics and the previous sample
         z_smpls[s,:,:] = pf.sample()
-        print "dV: ", (z_smpls[s,:,0] - z_smpls[s-1,:,0]).mean()
+        # z_smpls[s,:,:] = z_smpls[s-1,:,:]
+        # print "dz: ", (z_smpls[s,:,:] - z_smpls[s-1,:,:]).sum(0)
 
         # Resample the GP
         gp1.resample(z_smpls[s,:,:], dt)
         gp2.resample(z_smpls[s,:,:], dt)
 
-
         # Resample the noise levels
-        gp1.resample_transition_noise(z_smpls[s, :, :], t)
-        gp2.resample_transition_noise(z_smpls[s, :, :], t)
+        sigmasq = resample_transition_noise(body, z_smpls[s,:,:], inpt, t)
+        # HACK: Fix the voltage transition noise
+        # sigmasq[0] = 0.5
+        print "Sigmasq: ", sigmasq
+        # prop.set_sigmasq(sigmasq)
+        gp1.set_sigmas(sigmasq)
+        gp2.set_sigmas(sigmasq)
+        # gp1.resample_transition_noise(z_smpls[s, :, :], t)
+        # gp2.resample_transition_noise(z_smpls[s, :, :], t)
+
+        # eta_sqs = resample_observation_noise(z_smpls[s,:,:], x)
+        # lkhd.set_etasq(eta_sqs)
 
         # Resample the conductances
         # resample_body(body,  t, z_smpls[s,:,:], sigmas[0])
@@ -358,6 +385,9 @@ def sample_z_given_x(t, x, inpt,
             plt.figure(i)
             plt.pause(0.001)
 
+        gp1_smpls.append(gp1.gps)
+        gp2_smpls.append(gp2.gps)
+
     z_mean = z_smpls.mean(axis=0)
     z_std = z_smpls.std(axis=0)
     z_env = np.zeros((T*2,2))
@@ -368,7 +398,67 @@ def sample_z_given_x(t, x, inpt,
     plt.ioff()
     plt.show()
 
-    return z_smpls
+    return z_smpls, gp1_smpls, gp2_smpls
+
+def resample_transition_noise(body, data, inpt, t,
+                              alpha0=100, beta0=100):
+    """
+    Resample sigma, the transition noise variance, under an inverse gamma prior
+    """
+    # import pdb; pdb.set_trace()
+    Xs = []
+    X_preds = []
+    X_diffs = []
+
+    T = data.shape[0]
+    D = data.shape[1]
+    dxdt = np.zeros((T,1,D))
+    x = np.zeros((T,1,D))
+    x[:,0,:] = data
+
+    # Compute kinetics of the voltage
+    body.kinetics(dxdt, x, inpt, np.arange(T-1).astype(np.int32))
+    dt = np.diff(t)
+    # TODO: Loop over data
+    dX_pred = dxdt[:-1, 0, :]
+    dX_data = (data[1:, :] - data[:-1, :]) / dt[:,None]
+    X_diffs = dX_pred - dX_data
+
+    # Resample transition noise.
+    X_diffs = np.array(X_diffs)
+    n = X_diffs.shape[0]
+
+    sigmasq = np.zeros(D)
+    for d in range(D):
+        alpha = alpha0 + n / 2.0
+        beta  = beta0 + np.sum(X_diffs[:,d] ** 2) / 2.0
+        # self.sigmas[d] = beta / alpha
+        sigmasq[d] = 1.0 / np.random.gamma(alpha, 1.0/beta)
+
+    # print "Sigma V: %.3f" % (sigmas[d])
+    return sigmasq
+
+def resample_observation_noise(z, x,
+                               alpha0=1.0, beta0=1.0):
+    """
+    Resample sigma, the transition noise variance, under an inverse gamma prior
+    """
+    # TODO: Iterate over obs dimensions. For now assume 1d
+    V_pred = z[:,0]
+    V_data = x[:,0]
+    V_diff = V_pred - V_data
+
+    # Resample transition noise.
+    n = V_diff.shape[0]
+
+    alpha = alpha0 + n / 2.0
+    beta  = beta0 + np.sum(V_diff ** 2) / 2.0
+    etasq = 1.0 / np.random.gamma(alpha, 1.0/beta)
+
+    print "eta V: %.3f" % (etasq)
+
+    return np.array([etasq])
+
 
 from hips.inference.mh import mh
 def resample_body(body, ts=[], datas=[], sigma=1.0):
@@ -430,6 +520,8 @@ def resample_body(body, ts=[], datas=[], sigma=1.0):
 
         for c,g in zip(body.children, gs):
             c.g = g
+
+        print "Gs: ", gs
 
 def initial_latent_trace(body, inpt, voltage, t):
     I_true = np.diff(voltage) * body.C
@@ -532,12 +624,22 @@ def initial_latent_trace(body, inpt, voltage, t):
 
     return sigmoid.value
 
-# t, z, x, inpt, st_axs, gp1_ax2, gp2_ax2 = sample_gp_model()
-# raw_input("Press enter to being sampling...\n")
-# sample_z_given_x(t, x, inpt, axs=st_axs, gp1_ax=gp1_ax2, gp2_ax=gp2_ax2, z0=None)
-
+# Sample data from either a GP model or a squid compartment
+# t, z, x, inpt, st_axs = sample_gp_model()
 t, z, x, inpt, st_axs = sample_squid_model()
+"""
 raw_input("Press enter to being sampling...\n")
 sample_z_given_x(t, x, inpt, axs=st_axs, initialize='optimize')
+
+"""
+# raw_input("Press enter to being sampling...\n")
+# sample_z_given_x(t, x, inpt, z0=z, axs=st_axs)
+z_smpls, gp1_smpls, gp2_smpls = sample_z_given_x(t, x, inpt, N_samples=100, axs=st_axs, initialize='constant')
+# sample_z_given_x(t, x, inpt, axs=st_axs, z0=z, initialize='ground_truth')
+# sample_z_given_x(t, x, inpt, axs=st_axs, initialize='optimize')
+
+with open('squid_results.pkl', 'w') as f:
+    cPickle.dump((z_smpls, gp1_smpls, gp2_smpls), f, protocol=-1)
+
 
 

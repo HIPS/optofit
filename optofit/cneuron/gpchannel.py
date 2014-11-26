@@ -5,6 +5,8 @@ import numpy as np
 from channels import Channel
 
 from GPy.core.sparse_gp import SparseGP
+from GPy.core.gp import GP
+
 from GPy.models import SparseGPRegression, GPRegression
 from GPy.kern import rbf
 from GPy.likelihoods import Gaussian
@@ -13,6 +15,14 @@ import matplotlib.pyplot as plt
 
 sigma = lambda x: 1./(1+np.exp(-x))
 sigma_inv = lambda x: np.log(x/(1-x))
+
+class GPWithVariance(GP):
+    def __init__(self, X, Y, kernel,  Y_variance):
+        # likelihood defaults to Gaussian
+        likelihood = Gaussian(Y, variance=Y_variance)
+
+        GP.__init__(self, X, likelihood, kernel)
+        self.ensure_default_constraints()
 
 class SparseGPWithVariance(SparseGP):
     def __init__(self, X, Y, kernel,  Y_variance, Z=None, num_inducing=25):
@@ -94,6 +104,7 @@ class GPChannel(Channel):
         for d in range(self.D):
             # Sample the function value at the inducing points
             self.hs.append(np.random.multivariate_normal(m, C, 1).T)
+            # self.hs.append(np.zeros((self.Z.shape[0],1)))
 
             # Create a sparse GP model with the sampled function h
             # This will be used for prediction
@@ -165,16 +176,17 @@ class GPChannel(Channel):
                 ddt = dt.reshape((z.shape[0]-1, 1))
                 dz = (z[1:,d:d+1] - z[:-1,d:d+1]) / ddt
                 Ys.append(dz)
+
+                outliers = np.where(dz>dz.mean() + 3*dz.std())[0]
+                # if len(outliers) > 0:
+                    # print "dz has outliers at indices ", outliers
+                    # import pdb; pdb.set_trace()
+
             else:
                 Ys.append(z[1:,d:d+1])
 
         X = np.vstack(Xs)
         Y = np.vstack(Ys)
-
-        outliers = np.where(dz>dz.mean() + 3*dz.std())[0]
-        if len(outliers) > 0:
-            print "dz has outliers at indices ", outliers
-            # import pdb; pdb.set_trace()
 
         return X,Y
 
@@ -187,8 +199,10 @@ class GPChannel(Channel):
             X,Y = self._compute_regression_data(data, dt, d=d)
 
             # Set up the sparse GP regression model with the sampled inputs and outputs
-            gpr = SparseGPWithVariance(X, Y, self.kernel, self.sigmas[d], num_inducing=25)
+            gpr = SparseGPWithVariance(X, Y, self.kernel, self.sigmas[d], num_inducing=100)
+            # gpr = GPWithVariance(X, Y, self.kernel, self.sigmas[d])
             # gpr = GPRegression(X, Y, self.kernel)
+
 
             # HACK: Rather than using a truly nonparametric approach, just sample
             # the GP at the grid of inducing points and interpolate at the GP mean
@@ -199,65 +213,15 @@ class GPChannel(Channel):
             # h,_,_,_ = gpr.predict(self.Z)
 
             # HACK: Recreate the GP with the sampled function h
-            gp = SparseGPWithVariance(self.Z, h, self.kernel, self.sigmas[d], num_inducing=25)
-
-            # if self.name == 'gpk':
-            #     import pdb; pdb.set_trace()
-            #     gpr.plot()
+            gp = SparseGPWithVariance(self.Z, h, self.kernel, self.sigmas[d], num_inducing=100)
 
             self.hs[d] = h
             self.gps[d] = gp
+            # self.gps[d] = gpr
 
-    def resample_transition_noise(self, data, t):
-        """
-        Resample sigma, the transition noise variance, under an inverse gamma prior
-        """
-        #raise NotImplementedError("Still need to implement gamma resampling")
-        # import pdb; pdb.set_trace()
-        # Compute the predicted state and the actual next state
-        Xs = []
-        X_preds = []
-        X_diffs = []
-        
-        T = data.shape[0]
-        D = data.shape[1]
-        dxdt = np.zeros((T,1,D))
-        x = np.zeros((T,1,D))
-        x[:,0,:] = data
-
-        # Compute kinetics with no input
-        inpt = None
-        dxdt = self.kinetics(dxdt, x, inpt, np.arange(T-1))
-        dt = np.diff(t)
-
-        # TODO: Loop over data
-        # import pdb; pdb.set_trace()
-        # Compute predicted state given kinetics
-        # X_pred = data[:-1,self.x_offset:self.x_offset+self.D,] + \
-        #          dxdt[:,0,:][:-1,self.x_offset:self.x_offset+self.D]*np.dot(np.ones((self.D, 1)), [dt]).T
-        # X = data[1:, self.x_offset:self.x_offset+self.D]
-        #
-        # X_diff = X_pred - X
-
-        # Xs.append(X)
-        # X_preds.append(X_pred)
-        # X_diffs.append(X_diff)
-
-        slc = slice(self.x_offset, self.x_offset+self.D)
-        dX_pred = dxdt[:-1, 0, slc]
-        dX_data = (data[1:, slc] - data[:-1, slc]) / dt[:,None]
-        X_diffs = dX_pred - dX_data
-
-        # TODO: Resample transition noise. See Wikipedia for form of posterior of normal-gamma model
-        X_diffs = np.array(X_diffs)
-        n = X_diffs.shape[0]
+    def set_sigmas(self, sigmas):
         for d in range(self.D):
-            #import pdb; pdb.set_trace()
-            alpha = self.a0 + n / 2.0
-            beta  = self.b0 + np.sum(X_diffs[:,d] ** 2) / 2.0
-            # self.sigmas[d] = beta / alpha
-            self.sigmas[d] = 1.0 / np.random.gamma(alpha, 1.0/beta)
-            print "Sigma %s[%d]: %.3f" % (self.name, d, self.sigmas[d])
+            self.sigmas[d] = sigmas[self.x_offset+d]
 
     def plot(self, ax=None, im=None, l=None, cmap=plt.cm.hot, data=[]):
         # if self.D > 1:
@@ -296,9 +260,9 @@ class GPChannel(Channel):
         if len(data) > 0:
             X,Y = self._compute_regression_data(data, dts=1)
             if l is None and ax is not None:
-                l = ax.plot(X[:,1], X[:,0], 'ko')
+                l = ax.plot(X[:,-1], X[:,0], 'ko')
             elif l is not None:
-                l[0].set_data(X[:,1], X[:,0])
+                l[0].set_data(X[:,-1], X[:,0])
 
         if ax is not None:
             ax.set_xlim([self.V_min, self.V_max])

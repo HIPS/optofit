@@ -107,8 +107,8 @@ cdef class Compartment(Component):
         I = np.zeros((T, C))
         for m,c in enumerate(self.children):
             for i in range(T):
-                # I[i,m] = c.g * c.current(zz, V[i], i, 0)
-                I[i,m] = c.current(zz, V[i], i, 0)
+                I[i,m] = c.g * c.current(zz, V[i], i, 0)
+                # I[i,m] = c.current(zz, V[i], i, 0)
 
         M = 1 + C
         if lines is None and axs is None:
@@ -128,7 +128,7 @@ cdef class Compartment(Component):
                 lm = axm.plot(t, I[:,m], color=color)
 
                 axm.set_ylabel('I_%s' % c.name)
-                axm.set_ylim((-20,20))
+                axm.set_ylim((-100,100))
 
                 axs.append(axm)
                 lines.append(lm)
