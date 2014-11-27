@@ -266,14 +266,19 @@ def make_figure_3():
     V_max = 50.
     dlogit = lambda x: 1./(x*(1-x))
 
-    xx = np.linspace(0.001,0.999, 1000)
     g = lambda x: x**4
     ginv = lambda u: u**(1./4)
     dg_dx = lambda x: 4*x**3
 
     u_to_x = lambda u: ginv(logistic(u))
     x_to_u = lambda x: logit(g(x))
-    uu = x_to_u(xx)
+
+    uu = np.linspace(-6,0,1000)
+    xx = u_to_x(uu)
+    #g = lambda x: x
+    #ginv = lambda u: u
+    #dg_dx = lambda x: 1.0
+
 
     # Compute dynamics du/dt
     alpha = lambda V: 0.01 * (10.01-V) / (np.exp((10.01-V)/10.) - 1)
