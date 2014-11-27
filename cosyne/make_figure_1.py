@@ -7,6 +7,7 @@ import itertools
 import numpy as np
 seed = np.random.randint(2**16)
 # seed = 2958
+#seed = 58187
 seed = 60017
 print "Seed: ", seed
 
@@ -226,7 +227,7 @@ def make_figure_1(t, inpt, z_true, z_smpls, gpna_smpls, gpk_smpls):
     plt.show()
 
 def make_figure_2(gpk_smpls):
-    grid = 10
+    grid = 100
     z_min = logit(0.001)
     z_max = logit(0.999)
     V_min = -80.
@@ -307,14 +308,195 @@ def make_figure_3():
     plt.ioff()
     plt.show()
 
+def make_figure_4():
+    logit = lambda x: np.log(x / (1-x))
+    logistic = lambda u: np.exp(u) / (1 + np.exp(u))
+    dlogit = lambda x: 1./(x*(1-x))
 
+    g = lambda x: x**4
+    ginv = lambda u: u**(1./4)
+    dg_dx = lambda x: 4*x**3
+
+    u_to_x = lambda u: ginv(logistic(u))
+    x_to_u = lambda x: logit(g(x))
+
+    uu = np.linspace(-6,6,1000)
+    xx = u_to_x(uu)
+
+    # Compute dynamics du/dt 
+    alpha = lambda V: 0.01 * (10.01-V) / (np.exp((10.01-V)/10.) - 1)
+    beta = lambda V: 0.125 * np.exp(-V/80.)
+    dx_dt = lambda x,V: alpha(V)*(1-x) - beta(V) * x
+    du_dt = lambda u,V: dlogit(g(u_to_x(u))) * dg_dx(u_to_x(u)) * dx_dt(u_to_x(u),V)
+
+    # Plot the change in u as a function of u and V
+    V = np.linspace(0,100,100)
+    fig = plt.figure()
+    ax1 = fig.add_subplot(1,2,1)
+    ax1.imshow(du_dt(uu[:,None], V[None,:]), 
+               extent=[V[0], V[-1], uu[-1], uu[0]], 
+               interpolation="none",
+               cmap=plt.cm.Reds)
+    ax1.set_aspect(20)
+    ax1.set_xlabel('V')
+    ax1.set_ylabel('u')
+    ax1.set_title('du_dt(u,V)')
+
+    ax2 = fig.add_subplot(1,2,2)
+    ax2.imshow(dx_dt(xx[:,None], V[None,:]), 
+               extent=[V[0], V[-1], xx[-1], xx[0]], 
+               interpolation="none",
+               cmap=plt.cm.Reds)
+    ax2.set_aspect(100)
+    ax2.set_xlabel('V')
+    ax2.set_ylabel('x')
+    ax2.set_title('dx_dt(x,V)')
+    plt.show()
+
+def make_figure_5(gpk_smpls):
+    g = lambda x: x**4
+    ginv = lambda u: u**(1./4)
+    dg_dx = lambda x: 4*x**3
+
+    u_to_x = lambda u: ginv(logistic(u))
+    x_to_u = lambda x: logit(g(x))
+    dlogit = lambda x: 1./(x*(1-x))
+
+    uu = np.linspace(-6,6,100)
+    xx = u_to_x(uu)
+
+    # Compute dynamics du/dt 
+    alpha = lambda V: 0.01 * (10.01-V) / (np.exp((10.01-V)/10.) - 1)
+    beta = lambda V: 0.125 * np.exp(-V/80.)
+    dx_dt = lambda x,V: alpha(V)*(1-x) - beta(V) * x
+    du_dt = lambda u,V: dlogit(g(u_to_x(u))) * dg_dx(u_to_x(u)) * dx_dt(u_to_x(u),V)
+
+    grid = 100
+    z_min = logit(0.001)
+    z_max = logit(0.999)
+    V_min = -80
+    V_max = 50
+
+    zz = np.linspace(z_min, z_max, grid)
+    V_gp = np.linspace(V_min, V_max, grid)
+    Z = np.array(list(
+              itertools.product(*([zz for _ in range(1)]
+                                  + [V_gp]))))
+
+    h_smpls = []
+    for gps in gpk_smpls:
+        m_pred, _, _, _ = gps[0].predict(Z)
+        h_smpls.append(m_pred)
+
+    h_mean = np.array(h_smpls).mean(0)
+    h_mean = h_mean.reshape((grid, grid))
+
+    # Plot the change in u as a function of u and V
+    
+    def dsig(z):
+        sigz = logistic(z)
+        return np.multiply(sigz, 1 - sigz)
+
+    df_dt = lambda z, dzdt: np.multiply(dsig(z), dzdt)
+    fig = plt.figure()
+
+    ax1 = fig.add_subplot(2,2,1)
+    dudt = du_dt(uu[:,None], V_gp[None,:])
+    v_max = max((np.max(dudt), np.max(h_mean)))
+    v_min = min((np.min(dudt), np.min(h_mean)))
+    ax1.imshow(du_dt(uu[:,None], V_gp[None,:]), 
+               extent=[V_gp[0], V_gp[-1], uu[-1], uu[0]], 
+               interpolation="none",
+               cmap=plt.cm.Reds,
+               vmin=v_min,
+               vmax=v_max)
+    ax1.set_aspect(20)
+    ax1.set_xlabel('V')
+    ax1.set_ylabel('latent state')
+    ax1.set_title('Ground Truth: dz_dt(z,V)')
+
+    ax2 = fig.add_subplot(2,2,3)
+    ax2.imshow(h_mean, 
+               extent=[V_gp[0], V_gp[-1], uu[-1], uu[0]], 
+               interpolation="none",
+               cmap=plt.cm.Reds,
+               vmin=v_min,
+               vmax=v_max)
+    ax2.set_aspect(20)
+    ax2.set_xlabel('V')
+    ax2.set_ylabel('latent state')
+    ax2.set_title('Inferred: dz_dt(z,V)')
+    
+    ax1 = fig.add_subplot(2,2,2)
+    ax1.imshow(uu[:, None] * dg_dx(u_to_x(uu[:, None])) * dx_dt(u_to_x(uu[:, None]), V_gp[None, :]+60),
+               extent=[V_gp[0], V_gp[-1], xx[-1], xx[0]],
+               interpolation="none",
+               cmap=plt.cm.Reds,
+               vmin=-1,
+               vmax=.5)
+    ax1.set_aspect(100)
+    ax1.set_xlabel('V')
+    ax1.set_ylabel('open fraction')
+    ax1.set_title('Ground Truth: df_dt(f,V)')
+
+    ax2 = fig.add_subplot(2,2,4)
+    ax2.imshow(df_dt(np.array([zz for a in range(grid)]).transpose(), h_smpls[0].reshape((grid, grid))),
+               extent=[V_gp[0], V_gp[-1], xx[-1], xx[0]], 
+               interpolation="none",
+               cmap=plt.cm.Reds,
+               vmin=-1,
+               vmax=.5)
+    ax2.set_aspect(100)
+    ax2.set_xlabel('V')
+    ax2.set_ylabel('open fraction')
+    ax2.set_title('Inferred: df_dt(f,V)')
+    plt.show()
+
+
+    
+    def plot_at_x(ax, index):
+        mean = uu[:, None] * dg_dx(u_to_x(uu[:, None])) * dx_dt(u_to_x(uu[:, None]), V_gp[None, :]+60)
+        mean = mean[index, :]
+        #std = 0.0001 * np.ones(mean.shape)
+        voltage = V_gp
+
+        color = 'r'
+        ax.plot(voltage, mean, color=color)
+        #ax.fill_between(voltage, mean - std, mean + std, color=color, alpha = 0.5)
+
+        mean, _, dzdt_low, dzdt_high = gpk_smpls[62][0].predict(Z)
+        mean      = mean.reshape((grid, grid))
+        dzdt_low  = dzdt_low.reshape((grid, grid))
+        dzdt_high = dzdt_high.reshape((grid, grid))
+        
+        zs = np.array([zz for b in range(grid)]).transpose()
+        dfdt_mean = df_dt(zs, mean)
+        dfdt_low  = df_dt(zs, dzdt_low)
+        dfdt_high = df_dt(zs, dzdt_high)
+
+        color = 'b'
+        ax.plot(voltage, dfdt_mean[index, :], color=color)
+        ax.fill_between(voltage, dfdt_low[index, :], dfdt_high[index, :], color=color, alpha = 0.5)
+
+    f, axs = plt.subplots(9, sharex=True)
+    for i in range(len(axs)):
+        plot_at_x(axs[i], i*2 + 42)
+    plt.show()
+    
 # Simulate the squid compartment to get the ground truth
-# t, z_true, x, inpt = sample_squid_model()
+t, z_true, x, inpt = sample_squid_model()
 
 # Load the results of the pMCMC inference
-with open('squid_results.pkl', 'r') as f:
+with open('squid_results9.pkl', 'r') as f:
     z_smpls, gpna_smpls, gpk_smpls = cPickle.load(f)
 
-# make_figure_1(t, inpt, z_true, z_smpls, gpna_smpls, gpk_smpls)
-# make_figure_2(gpk_smpls)
+burn = 20
+z_smpls    = z_smpls[burn:]
+gpna_smpls = gpna_smpls[burn:]
+gpk_smpls  = gpk_smpls[burn:]
+
+make_figure_1(t, inpt, z_true, z_smpls, gpna_smpls, gpk_smpls)
+make_figure_2(gpk_smpls)
 make_figure_3()
+make_figure_4()
+make_figure_5(gpk_smpls)

@@ -5,7 +5,7 @@ import cPickle
 import numpy as np
 seed = np.random.randint(2**16)
 # seed = 2958
-seed = 60017
+# seed = 60017
 print "Seed: ", seed
 
 if "DISPLAY" not in os.environ:
@@ -389,7 +389,7 @@ def sample_z_given_x(t, x, inpt,
         gp2_smpls.append(gp2.gps)
 
         if s % 10 == 0:
-            with open('squid_results' + str(s / 10) + '.pkl', 'w') as f:
+            with open('squid2_results' + str(s / 10) + '.pkl', 'w') as f:
                 cPickle.dump((z_smpls, gp1_smpls, gp2_smpls), f, protocol=-1)
 
     z_mean = z_smpls.mean(axis=0)
@@ -631,19 +631,18 @@ def initial_latent_trace(body, inpt, voltage, t):
 # Sample data from either a GP model or a squid compartment
 # t, z, x, inpt, st_axs = sample_gp_model()
 t, z, x, inpt, st_axs = sample_squid_model()
-"""
-raw_input("Press enter to being sampling...\n")
-sample_z_given_x(t, x, inpt, axs=st_axs, initialize='optimize')
 
-"""
+#with open('squid2_ground.pkl', 'w') as f:
+#    cPickle.dump((t, z, x, inpt, st_axs), f)
+
 # raw_input("Press enter to being sampling...\n")
 # sample_z_given_x(t, x, inpt, z0=z, axs=st_axs)
-z_smpls, gp1_smpls, gp2_smpls = sample_z_given_x(t, x, inpt, N_samples=100, axs=st_axs, initialize='constant')
+z_smpls, gp1_smpls, gp2_smpls = sample_z_given_x(t, x, inpt, N_samples=100, axs=st_axs, initialize='optimize')
 # sample_z_given_x(t, x, inpt, axs=st_axs, z0=z, initialize='ground_truth')
 # sample_z_given_x(t, x, inpt, axs=st_axs, initialize='optimize')
 
-with open('squid_results.pkl', 'w') as f:
-    cPickle.dump((z_smpls, gp1_smpls, gp2_smpls), f, protocol=-1)
+with open('squid2_results.pkl', 'w') as f:
+    cPickle.dump((z_smpls, gp1_smpls, gp2_smpls), f)
 
 
 
