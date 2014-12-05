@@ -1,4 +1,5 @@
 import os
+import sys
 import copy
 import cPickle
 
@@ -6,7 +7,6 @@ import numpy as np
 seed = np.random.randint(2**16)
 # seed = 2958
 # seed = 60017
-print "Seed: ", seed
 
 if "DISPLAY" not in os.environ:
     import matplotlib
@@ -25,9 +25,19 @@ from optofit.cinference.pmcmc import *
 import kayak
 import scipy
 
+
+plot_progress = True
+
+args = iter(sys.argv)
+for line in args:
+    if line == "--seed":
+        seed = int(next(args))
+    elif line == "--no_graph":
+        plot_progress = False
+
 # Set the random seed for reproducibility
 np.random.seed(seed)
-
+print "Seed: ", seed
 # Make a simple compartment
 hypers = {
             'C'      : 1.0,
@@ -95,16 +105,18 @@ def sample_squid_model(start = 20, stop = 80, intensity = 7.):
 
     # Set the recording duration
     t_start = 0
-    t_stop = 300.
+    t_stop = 600.
     dt = 0.1
     t = np.arange(t_start, t_stop, dt)
     T = len(t)
 
-    # Make input with an injected current from 500-600ms
     inpt = np.zeros((T, I))
     inpt[20/dt:40/dt,:] = 3.
     inpt[120/dt:160/dt,:] = 5.
     inpt[220/dt:280/dt,:] = 7.
+    inpt[300/dt:380/dt,:] = 9.
+    inpt[500/dt:599/dt,:] = 11.
+    
     inpt += np.random.randn(T, I)
 
     # Set the initial distribution to be Gaussian around the steady state
@@ -152,15 +164,17 @@ def sample_squid_model(start = 20, stop = 80, intensity = 7.):
     xd = x[::intvl, :].copy('C')
     inptd = inpt[::intvl].copy('C')
 
-    # Plot the first particle trajectory
-    plt.ion()
-    st_axs, _ = squid_body.plot(td, zd, color='k')
-    # Plot the observed voltage
-    st_axs[0].plot(td, xd[:,0], 'r')
+    st_axs = None
+    if(plot_progress):
+        # Plot the first particle trajectory
+        plt.ion()
+        st_axs, _ = squid_body.plot(td, zd, color='k')
+        # Plot the observed voltage
+        st_axs[0].plot(td, xd[:,0], 'r')
 
-    # plt.plot(t, x[:,0],  'r')
-    plt.show()
-    plt.pause(0.01)
+        # plt.plot(t, x[:,0],  'r')
+        plt.show()
+        plt.pause(0.01)
 
     return td, zd, xd, inptd, st_axs
 
@@ -213,25 +227,27 @@ def sample_gp_model():
     # Extract the first (and in this case only) particle
     z = z[:,0,:].copy(order='C')
 
-    # Plot the first particle trajectory
-    st_axs, _ = body.plot(t, z, color='k')
-    # Plot the observed voltage
-    st_axs[0].plot(t, x[:,0], 'r')
+    st_axs = None
+    if(plot_progress):
+        # Plot the first particle trajectory
+        st_axs, _ = body.plot(t, z, color='k')
+        # Plot the observed voltage
+        st_axs[0].plot(t, x[:,0], 'r')
 
-    # Plot the GP channel dynamics
-    # gp1_fig = plt.figure()
-    # gp1_ax1 = gp1_fig.add_subplot(121)
-    # gp1.plot(ax=gp1_ax1)
-    # gp1_ax2 = gp1_fig.add_subplot(122)
-    #
-    # gp2_fig = plt.figure()
-    # gp2_ax1 = gp2_fig.add_subplot(121)
-    # gp2.plot(ax=gp2_ax1)
-    # gp2_ax2 = gp2_fig.add_subplot(122)
+        # Plot the GP channel dynamics
+        # gp1_fig = plt.figure()
+        # gp1_ax1 = gp1_fig.add_subplot(121)
+        # gp1.plot(ax=gp1_ax1)
+        # gp1_ax2 = gp1_fig.add_subplot(122)
+        #
+        # gp2_fig = plt.figure()
+        # gp2_ax1 = gp2_fig.add_subplot(121)
+        # gp2.plot(ax=gp2_ax1)
+        # gp2_ax2 = gp2_fig.add_subplot(122)
 
-    plt.ion()
-    plt.show()
-    plt.pause(0.01)
+        plt.ion()
+        plt.show()
+        plt.pause(0.01)
 
     return t, z, x, inpt, st_axs
 
@@ -322,16 +338,17 @@ def sample_z_given_x(t, x, inpt,
     pf = ParticleGibbsAncestorSampling(T, N_particles, D)
     pf.initialize(init, prop, lkhd, x, z[:,0,:].copy('C'))
 
-    # Plot the initial state
-    gp1_ax, im1, l_gp1 = gp1.plot(ax=gp1_ax, data=z[:,0,:])
-    gp2_ax, im2, l_gp2 = gp2.plot(ax=gp2_ax, data=z[:,0,:])
-    axs, lines = body.plot(t, z[:,0,:], color='b', axs=axs)
-    axs[0].plot(t, x[:,0], 'r')
+    if (plot_progress):
+        # Plot the initial state
+        gp1_ax, im1, l_gp1 = gp1.plot(ax=gp1_ax, data=z[:,0,:])
+        gp2_ax, im2, l_gp2 = gp2.plot(ax=gp2_ax, data=z[:,0,:])
+        axs, lines = body.plot(t, z[:,0,:], color='b', axs=axs)
+        axs[0].plot(t, x[:,0], 'r')
 
-    # Update figures
-    for i in range(1,4):
-        plt.figure(i)
-        plt.pause(0.001)
+        # Update figures
+        for i in range(1,4):
+            plt.figure(i)
+            plt.pause(0.001)
 
     # Initialize sample outputs
     z_smpls = np.zeros((N_samples,T,D))
@@ -375,23 +392,26 @@ def sample_z_given_x(t, x, inpt,
         # Resample the conductances
         # resample_body(body,  t, z_smpls[s,:,:], sigmas[0])
 
-        # Plot the sample
-        body.plot(t, z_smpls[s,:,:], lines=lines)
-        gp1.plot(im=im1, l=l_gp1, data=z_smpls[s,:,:])
-        gp2.plot(im=im2, l=l_gp2, data=z_smpls[s,:,:])
+        if(plot_progress):
+            # Plot the sample
+            body.plot(t, z_smpls[s,:,:], lines=lines)
+            gp1.plot(im=im1, l=l_gp1, data=z_smpls[s,:,:])
+            gp2.plot(im=im2, l=l_gp2, data=z_smpls[s,:,:])
 
-        # Update figures
-        for i in range(1,4):
-            plt.figure(i)
-            plt.pause(0.001)
+            # Update figures
+            for i in range(1,4):
+                plt.figure(i)
+                plt.pause(0.001)
 
-        gp1_smpls.append(gp1.gps)
-        gp2_smpls.append(gp2.gps)
+            gp1_smpls.append(gp1.gps)
+            gp2_smpls.append(gp2.gps)
 
-        if s % 10 == 0:
-            with open('squid2_results' + str(s / 10) + '.pkl', 'w') as f:
+        freq = 1
+        if s % freq == 0:
+            with open('squid' + str(seed) + '_results' + str(s / freq) + '.pkl', 'w') as f:
                 cPickle.dump((z_smpls, gp1_smpls, gp2_smpls), f, protocol=-1)
-
+            if(s / freq > 1):
+                os.remove('squid' + str(seed) + '_results' + str((s / freq) - 1) + '.pkl')
     z_mean = z_smpls.mean(axis=0)
     z_std = z_smpls.std(axis=0)
     z_env = np.zeros((T*2,2))
@@ -399,8 +419,9 @@ def sample_z_given_x(t, x, inpt,
     z_env[:,0] = np.concatenate((t, t[::-1]))
     z_env[:,1] = np.concatenate((z_mean[:,0] + z_std[:,0], z_mean[::-1,0] - z_std[::-1,0]))
 
-    plt.ioff()
-    plt.show()
+    if(plot_progress):
+        plt.ioff()
+        plt.show()
 
     return z_smpls, gp1_smpls, gp2_smpls
 
@@ -552,6 +573,7 @@ def initial_latent_trace(body, inpt, voltage, t):
     N = 1
     batch_size = 500
     learn = .0000001
+    runs = 500
 
     batcher = kayak.Batcher(batch_size, N)
     
@@ -618,11 +640,11 @@ def initial_latent_trace(body, inpt, voltage, t):
     ) + kayak.MatSum(kayak.ElemPower(I_channels, 2))
 
     grad = kyk_loss.grad(latent_trace)
-    for ii in xrange(5000):
+    for ii in xrange(runs):
         for batch in batcher:
             loss = kyk_loss.value
             if ii % 100 == 0:
-                print loss, np.sum(np.power(predicted.value - I_true, 2)) / T
+                print ii, loss, np.sum(np.power(predicted.value - I_true, 2)) / T
             grad = kyk_loss.grad(latent_trace) + .5 * grad
             latent_trace.value -= learn * grad
 
@@ -632,8 +654,8 @@ def initial_latent_trace(body, inpt, voltage, t):
 # t, z, x, inpt, st_axs = sample_gp_model()
 t, z, x, inpt, st_axs = sample_squid_model()
 
-#with open('squid2_ground.pkl', 'w') as f:
-#    cPickle.dump((t, z, x, inpt, st_axs), f)
+with open('squid_' + str(seed) + '_ground.pkl', 'w') as f:
+    cPickle.dump((t, z, x, inpt, st_axs), f)
 
 # raw_input("Press enter to being sampling...\n")
 # sample_z_given_x(t, x, inpt, z0=z, axs=st_axs)
@@ -641,7 +663,7 @@ z_smpls, gp1_smpls, gp2_smpls = sample_z_given_x(t, x, inpt, N_samples=100, axs=
 # sample_z_given_x(t, x, inpt, axs=st_axs, z0=z, initialize='ground_truth')
 # sample_z_given_x(t, x, inpt, axs=st_axs, initialize='optimize')
 
-with open('squid2_results.pkl', 'w') as f:
+with open('squid_' + str(seed) + '_results.pkl', 'w') as f:
     cPickle.dump((z_smpls, gp1_smpls, gp2_smpls), f)
 
 
