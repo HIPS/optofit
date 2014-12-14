@@ -571,9 +571,9 @@ def initial_latent_trace(body, inpt, voltage, t):
     Linv = scipy.linalg.solve_triangular(L.transpose(), np.identity(K.shape[0]))
 
     N = 1
-    batch_size = 500
+    batch_size = 5000
     learn = .0000001
-    runs = 500
+    runs = 10000
 
     batcher = kayak.Batcher(batch_size, N)
     
@@ -650,21 +650,22 @@ def initial_latent_trace(body, inpt, voltage, t):
 
     return sigmoid.value
 
+
+
 # Sample data from either a GP model or a squid compartment
 # t, z, x, inpt, st_axs = sample_gp_model()
 t, z, x, inpt, st_axs = sample_squid_model()
 
 with open('squid_' + str(seed) + '_ground.pkl', 'w') as f:
-    cPickle.dump((t, z, x, inpt, st_axs), f)
+    cPickle.dump((t, z, x, inpt), f)
 
 # raw_input("Press enter to being sampling...\n")
 # sample_z_given_x(t, x, inpt, z0=z, axs=st_axs)
-z_smpls, gp1_smpls, gp2_smpls = sample_z_given_x(t, x, inpt, N_samples=100, axs=st_axs, initialize='optimize')
+z_smpls, gp1_smpls, gp2_smpls = sample_z_given_x(t, x, inpt, N_samples=1000, axs=st_axs, initialize='optimize')
 # sample_z_given_x(t, x, inpt, axs=st_axs, z0=z, initialize='ground_truth')
 # sample_z_given_x(t, x, inpt, axs=st_axs, initialize='optimize')
 
 with open('squid_' + str(seed) + '_results.pkl', 'w') as f:
     cPickle.dump((z_smpls, gp1_smpls, gp2_smpls), f)
-
 
 
