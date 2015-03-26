@@ -1,0 +1,59 @@
+
+
+\documentclass{report}
+
+\RequirePackage{amsthm,amsmath,amssymb}
+\RequirePackage[square,authoryear,sort]{natbib}
+\RequirePackage[authoryear]{natbib}
+\RequirePackage[colorlinks,citecolor=blue,urlcolor=blue]{hyperref}
+
+\usepackage{fullpage}
+\usepackage[mathcal, mathscr]{eucal}
+\usepackage{colortbl}
+\usepackage[size=small]{caption}
+\usepackage{subcaption}
+\usepackage{graphicx}
+\graphicspath{{./figures/eps/}}
+\DeclareGraphicsExtensions{.pdf,.png,.jpg,.eps}
+
+
+\bibpunct[; ]{(}{)}{;}{a}{,}{;} 
+
+
+\usepackage{booktabs}
+
+\newcommand{\vect}{\boldsymbol}
+\newcommand{\matr}{\boldsymbol}
+\newcommand{\diag}{\textrm{diag}}
+
+\newcommand{\specialcell}[2][c]{%
+  \begin{tabular}[#1]{@{}c@{}}#2\end{tabular}}
+  
+
+
+\begin{document}
+
+
+\section{Introduction} 
+Biophysical models explain the activity of neurons in terms of underlying electrophysiological mechanisms with measurable quantities. In particular, the Hodgkin-Huxley equations predict the dynamics of the membrane potential according to the activation and density of the underlying ion channels. This is in contrast to phenomenological models like the integrate-and-fire model or the linear-nonlinear-Poisson model that explain the statistical nature of spiking in terms of state variables such as threshold and firing rates that lack a clear mechanistic analog. Phenomenological differences are typically easier to typify in terms of classifying neural activity, while electrophysiological models have actual physical interpretations. Bridging the two is somewhat difficult to do in a principled way.
+
+Recent developments in neuroscience, particularly optogenetics afford new opportunities to control, observe, and experiment on neurons. Different measurement and control paradigms afford different types of inferences, and different types of stimuli.
+
+Insofar as most measurement paradigms measure something to do with voltage, under a fixed input, neurons can only be distinguished between in terms of differences between voltage traces. This raises a few questions.
+
+What neurons are the same under a wide variety of inputs? 
+
+How does biology use the redundancy in ion channel densities?
+
+What can you learn about neurons using different experimental protocols?
+
+
+\section{Approach}
+By using MDS on a wide variety of neurons under a wide variety of inputs to generate voltage traces, we can come up with a pairwise distance between voltage traces in terms of squared error between voltages, across a variety of inputs, to gain a rough idea of the "similarity" of two different neurons. Then, we can see whether or not a given group of inputs and observation models can recover a similar structure, and gain information as to what is not distinguished between.
+
+\section{Questions}
+
+
+\end{document}
+
+   

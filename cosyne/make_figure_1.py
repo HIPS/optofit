@@ -7,8 +7,8 @@ import itertools
 import numpy as np
 seed = np.random.randint(2**16)
 # seed = 2958
-#seed = 58187
-seed = 60017
+seed = 58187
+#seed = 60017
 print "Seed: ", seed
 
 import matplotlib.pyplot as plt
@@ -469,7 +469,7 @@ def make_figure_5(gpk_smpls):
         ax.plot(voltage, mean, color=color)
         #ax.fill_between(voltage, mean - std, mean + std, color=color, alpha = 0.5)
 
-        mean, _, dzdt_low, dzdt_high = gpk_smpls[62][0].predict(Z)
+        mean, _, dzdt_low, dzdt_high = gpk_smpls[7][0].predict(Z) #62
         mean      = mean.reshape((grid, grid))
         dzdt_low  = dzdt_low.reshape((grid, grid))
         dzdt_high = dzdt_high.reshape((grid, grid))
@@ -487,21 +487,90 @@ def make_figure_5(gpk_smpls):
     for i in range(len(axs)):
         plot_at_x(axs[i], i*2 + 42)
     plt.show()
+
+    fig = plt.figure()
+    ax  = fig.add_subplot(1, 1, 1)
+    ax.imshow((uu[:, None] * dg_dx(u_to_x(uu[:, None])) * dx_dt(u_to_x(uu[:, None]), V_gp[None, :]+60)) - h_mean,
+            extent=[V_gp[0], V_gp[-1], xx[-1], xx[0]],
+            cmap=plt.cm.RdGy,
+            vmin=-.5,
+            vmax=.5,
+    )
+    ax.set_aspect(100)
+    plt.show()
+
+def make_figure_7(z_smpls, gpk_smpls):
+    g = lambda x: x**4
+    ginv = lambda u: u**(1./4)
+    dg_dx = lambda x: 4*x**3
+
+    u_to_x = lambda u: ginv(logistic(u))
+    x_to_u = lambda x: logit(g(x))
+    dlogit = lambda x: 1./(x*(1-x))
+
+    uu = np.linspace(-6,6,100)
+    xx = u_to_x(uu)
+
+    # Compute dynamics du/dt 
+    alpha = lambda V: 0.01 * (10.01-V) / (np.exp((10.01-V)/10.) - 1)
+    beta = lambda V: 0.125 * np.exp(-V/80.)
+    dx_dt = lambda x,V: alpha(V)*(1-x) - beta(V) * x
+    du_dt = lambda u,V: dlogit(g(u_to_x(u))) * dg_dx(u_to_x(u)) * dx_dt(u_to_x(u),V)
+
+    grid = 100
+    z_min = logit(0.001)
+    z_max = logit(0.999)
+    V_min = -80
+    V_max = 50
+
+    zz = np.linspace(z_min, z_max, grid)
+    V_gp = np.linspace(V_min, V_max, grid)
+    Z = np.array(list(
+              itertools.product(*([zz for _ in range(1)]
+                                  + [V_gp]))))
+
+    h_smpls = []
+    for gps in gpk_smpls:
+        m_pred, _, _, _ = gps[0].predict(Z)
+        h_smpls.append(m_pred)
+
+    h_mean = np.array(h_smpls).mean(0)
+    h_mean = h_mean.reshape((grid, grid))
+
+    # Plot the change in u as a function of u and V
+    
+    def dsig(z):
+        sigz = logistic(z)
+        return np.multiply(sigz, 1 - sigz)
+
+    df_dt = lambda z, dzdt: np.multiply(dsig(z), dzdt)
+
+    fig = plt.figure()
+    ax  = fig.add_subplot(1, 1, 1)
+    ax.imshow((uu[:, None] * dg_dx(u_to_x(uu[:, None])) * dx_dt(u_to_x(uu[:, None]), V_gp[None, :]+60)) - df_dt(np.array([zz for a in range(grid)]).transpose(), h_mean),
+            extent=[V_gp[0], V_gp[-1], xx[-1], xx[0]],
+            cmap=plt.cm.RdGy
+    )
+    ax.set_aspect(100)
+    ax.scatter(z_smpls[:11, :, 0].reshape((11*3000)), logistic(z_smpls[:11, :, 3].reshape((11*3000))))
+    ax.set_title("Errors")
+    plt.show()
     
 # Simulate the squid compartment to get the ground truth
 t, z_true, x, inpt = sample_squid_model()
 
 # Load the results of the pMCMC inference
-with open('squid_results9.pkl', 'r') as f:
+with open('squid2_results5.pkl', 'r') as f:
     z_smpls, gpna_smpls, gpk_smpls = cPickle.load(f)
 
-burn = 20
+burn = 30
 z_smpls    = z_smpls[burn:]
 gpna_smpls = gpna_smpls[burn:]
 gpk_smpls  = gpk_smpls[burn:]
 
 make_figure_1(t, inpt, z_true, z_smpls, gpna_smpls, gpk_smpls)
-make_figure_2(gpk_smpls)
-make_figure_3()
-make_figure_4()
+#make_figure_2(gpk_smpls)
+#make_figure_3()
+#make_figure_4()
 make_figure_5(gpk_smpls)
+make_figure_7(z_smpls, gpk_smpls)
