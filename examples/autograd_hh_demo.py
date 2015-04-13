@@ -27,48 +27,32 @@ label.
 """
 
 import numpy as np
-np.seterr(all='raise')
+# np.seterr(all='raise')
 import matplotlib.pyplot as plt
 import autograd as ag
+from scipy.optimize import minimize
 
-# def hh_dynamics(z, t):
-#     # Compute dzdt for hodgkin huxley like model
-#     # z[0]:  V
-#     # z[1]:  m
-#     # z[2]:  h
-#     # z[3]:  n
-#     dzdt = np.zeros(4)
-#
-#     # Compute the voltage dynamics
-#     dzdt += voltage_dynamics(z, t)
-#
-#     # Compute the channel dynamics
-#     dzdt += sodium_dynamics(z, t)
-#     dzdt += potassium_dynamics(z, t)
-#
-#     # print dzdt
-#     # import pdb; pdb.set_trace()
-#
-#     return dzdt
 
-def voltage_dynamics(V, m, h, n, t, g_na):
-    g_leak = 0.3
+def voltage_dynamics(V, m, h, n, t, g, inpt):
+    # g_leak = 0.3
     # g_na = 120
-    g_k = 36
+    # g_k = 36
 
     # Compute the voltage drop through each channel
     V_leak = V - (-60.)
     V_na = m**3 * h * (V-50.)
     V_k = n**4 * (V-(-77.))
 
-    I_ionic = g_leak * V_leak
-    I_ionic += g_na * V_na
-    I_ionic += g_k * V_k
+    I_ionic = g[0] * V_leak
+    I_ionic += g[1] * V_na
+    I_ionic += g[2] * V_k
 
     # dVdt[t,n] = -1.0/self.C * I_ionic
     dVdt = -1.0 * I_ionic
 
     # Add in driving current
+    dVdt += inpt[t]
+
     return dVdt
 
 def sodium_dynamics(V, m, h, t):
@@ -104,7 +88,7 @@ def potassium_dynamics(V, n, t):
 #############################################################
 # Simulation
 #############################################################
-def forward_euler(z0, T, dt=1.0, g_na=120.):
+def forward_euler(z0, g, inpt, T, dt=1.0):
     z = np.zeros((T,4))
 
     z[0,:] = z0    
@@ -115,7 +99,7 @@ def forward_euler(z0, T, dt=1.0, g_na=120.):
         htm1 = z[t-1,2]
         ntm1 = z[t-1,3]
 
-        dvdt = voltage_dynamics(Vtm1, mtm1, htm1, ntm1, t, g_na)
+        dvdt = voltage_dynamics(Vtm1, mtm1, htm1, ntm1, t, g, inpt)
         dmdt, dhdt = sodium_dynamics(Vtm1, mtm1, htm1, t)
         dndt = potassium_dynamics(Vtm1, ntm1, t)
 
@@ -127,7 +111,7 @@ def forward_euler(z0, T, dt=1.0, g_na=120.):
 
     return z
 
-def simulate_and_compute_loss(v0, g_na, x, dt=1.0):
+def simulate_and_compute_loss(v0, g, inpt, x, dt=1.0):
     """
     Autograd doesn't take gradients through assignments.
     Here we compute the loss in an online fashion.
@@ -143,7 +127,7 @@ def simulate_and_compute_loss(v0, g_na, x, dt=1.0):
         loss += np.sum((x[t,0] - v)**2)
 
         # Compute dynamics
-        dvdt = voltage_dynamics(v, m, h, n, t, g_na)
+        dvdt = voltage_dynamics(v, m, h, n, t, g, inpt)
         dmdt, dhdt = sodium_dynamics(v, m, h, t)
         dndt = potassium_dynamics(v, n, t)
 
@@ -154,60 +138,67 @@ def simulate_and_compute_loss(v0, g_na, x, dt=1.0):
 
     return loss
 
-def generate_test_data(T=100, z0=np.ones(1), dt=1.0, g_na=120.):
-    z_true = forward_euler(z0, T, dt=dt, g_na=g_na)
+def generate_test_data(z0, g, inpt, T, dt=1.0):
+    z_true = forward_euler(z0, g, inpt, T, dt=dt)
 
-    sigma = 10.0
+    sigma = 0.0
     x_true = z_true + sigma * np.random.randn(*z_true.shape)
 
     return z_true, x_true
 
-
-def hh_test_autograd():
+def optimize_conductances():
+    """
+    Simple demo to optimize the conductance values for a given set of
+    neural dynamics
+    :return:
+    """
     dt = 0.01
-    T = 2.
-    t = np.arange(0,T,step=dt)
-    z0 = np.zeros(4)
-    z0[0] = -40
-    z0[1:] = 0.5
-    g_na = 120.
-    z_true, x_true = generate_test_data(T=len(t), z0=z0, dt=dt, g_na=g_na)
+    T = 2000     # number of time steps
+    t = np.arange(T) * dt
+
+    # Define an input
+    t_on  = 5.
+    t_off = 15.
+    i_amp = 1000.
+    inpt  = i_amp * (t > t_on)  * (t < t_off)
+
+    z0_true = np.zeros(4)
+    v0_true = -40
+    z0_true[0] = v0_true
+    z0_true[1:] = 0.5
+    g_true = np.array([0.2, 120., 36.])
+    z_true, x_true = generate_test_data(z0_true, g_true, inpt, T, dt=dt)
 
     # Plot the data
-    plt.plot(t, z_true[:,0], 'b')
+    plt.ion()
+    plt.plot(t, z_true[:,0], 'k', lw=2)
     plt.plot(t, x_true[:,0], 'r')
-    plt.show()
-
-    # # Compute the gradient, dLoss/dV_0 a range of initial conditions
-    # V0s = np.linspace(-30, -50, 5)
-    # loss = lambda v0: simulate_and_compute_loss(v0, g_na, x_true, dt=dt)
-    # dloss_dv0 = ag.grad(loss)
-    #
-    # dv0s = np.zeros_like(V0s)
-    # for i,V0 in enumerate(V0s):
-    #     print "Computing gradient for ", V0
-    #     dv0s[i] = dloss_dv0(V0)
-    #
-    # plt.figure()
-    # plt.plot(V0s, dv0s)
-    # plt.plot(V0s, np.zeros_like(V0s))
-    # plt.plot(z0[0], 0, 'ko')
     # plt.show()
 
-    # Compute the gradient, dLoss/dg_na at a range of initial conditions
-    gs = np.linspace(100, 150, 5)
-    loss = lambda g_na: simulate_and_compute_loss(z0[0], g_na, x_true, dt=dt)
-    dloss_dgna = ag.grad(loss)
+    # Initialize values to be optimized
+    g_inf = 10 * np.ones(3)
+    z_inf = forward_euler(z0_true, g_inf, inpt, T, dt=dt)
+    ln = plt.plot(t, z_inf[:,0], 'b', lw=2)[0]
 
-    dgs = np.zeros_like(gs)
-    for i,g in enumerate(gs):
-        print "Computing gradient for ", g
-        dgs[i] = dloss_dgna(g)
+    plt.pause(0.001)
 
-    plt.figure()
-    plt.plot(gs, dgs)
-    plt.plot(gs, np.zeros_like(gs))
-    plt.plot(g_na, 0, 'ko')
-    plt.show()
+    # Compute a gradient function as a function of g
+    loss = lambda g: simulate_and_compute_loss(v0_true, g, inpt, x_true, dt=dt)
+    grad = ag.grad(loss)
 
-hh_test_autograd()
+    # Make a callback to plot
+    itr = [0]
+    def callback(g_inf):
+        print "Iteration ", itr[0]
+        itr[0] = itr[0] + 1
+        z_inf = forward_euler(z0_true, g_inf, inpt, T, dt=dt)
+        ln.set_data(t, z_inf[:,0])
+        plt.pause(0.001)
+
+    # Optimize with scipy
+    bnds = [(0, None)] * 3
+    x = minimize(loss, g_inf, jac=grad, bounds=bnds, callback=callback)
+
+    print x
+
+optimize_conductances()
