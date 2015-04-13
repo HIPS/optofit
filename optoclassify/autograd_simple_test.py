@@ -1,5 +1,5 @@
 """
-Try out automatic gradients for Hodgkin-Huxley dynamics.
+Try out automatic gradients for a simple dynamical system
 
 The scalar output is the likelihood of the observed membrane
 potential under the Hodgkin-Huxley model with parameters
@@ -31,102 +31,15 @@ np.seterr(all='raise')
 import matplotlib.pyplot as plt
 import autograd as ag
 
-def simple_dynamics(z, t):
+def dynamics(z, t):
     #dzdt = 0.01 * np.ones_like(z)
     dzdt = 0.01 * np.ones_like(z) * np.sin(t)
     return dzdt
 
-def hh_dynamics(z, t):
-    # Compute dzdt for hodgkin huxley like model
-    # z[0]:  V
-    # z[1]:  m
-    # z[2]:  h
-    # z[3]:  n
-    dzdt = np.zeros(4)
-
-    # Compute the voltage dynamics
-    dzdt += voltage_dynamics(z, t)
-
-    # Compute the channel dynamics
-    dzdt += sodium_dynamics(z, t)
-    dzdt += potassium_dynamics(z, t)
-
-    # print dzdt
-    # import pdb; pdb.set_trace()
-
-    return dzdt
-
-def voltage_dynamics(z, t):
-    dzdt = np.zeros(4)
-    V = z[0]
-    m = z[1]
-    h = z[2]
-    n = z[3]
-
-    g_leak = 0.3
-    g_na = 120
-    g_k = 36
-
-    # Compute the voltage drop through each channel
-    V_leak = V - (-60.)
-    V_na = m**3 * h * (V-50.)
-    V_k = n**4 * (V-(-77.))
-
-    I_ionic = g_leak * V_leak
-    I_ionic += g_na * V_na
-    I_ionic += g_k * V_k
-
-    # dVdt[t,n] = -1.0/self.C * I_ionic
-    dVdt = -1.0 * I_ionic
-
-    # Add in driving current
-    # dVdt += 1.0/self.C * inpt[t,self.i_offset]
-    dzdt[0] = dVdt
-
-    return dzdt
-
-def sodium_dynamics(z, t):
-    dzdt = np.zeros(4)
-
-    # Use resting potential of zero
-    V = z[0] + 60
-    m = z[1]
-    h = z[2]
-
-    # Compute the alpha and beta as a function of V
-    am1 = 0.32*(13.1-V)/(np.exp((13.1-V)/4)-1)
-    ah1 = 0.128 * np.exp((17.0-V)/18.0)
-
-    bm1 = 0.28*(V-40.1)/(np.exp((V-40.1)/5.0)-1.0)
-    bh1 = 4.0/(1.0 + np.exp((40.-V)/5.0))
-
-    # Compute the channel state updates
-    dzdt[1] = am1*(1.-m) - bm1*m
-    dzdt[2] = ah1*(1.-h) - bh1*h
-
-    return dzdt
-
-def potassium_dynamics(z, t):
-    dzdt = np.zeros(4)
-
-    # Use resting potential of zero
-    V = z[0] + 60
-    n = z[3]
-
-    # Compute the alpha and beta as a function of V
-    an1 = 0.01*(V+55.) /(1-np.exp(-(V+55.)/10.))
-    bn1 = 0.125 * np.exp(-(V+65.)/80.)
-
-    # Compute the channel state updates
-    dzdt[3] = an1 * (1.0-n) - bn1*n
-
-    return dzdt
 
 #############################################################
 # Simulation
 #############################################################
-dynamics = hh_dynamics
-
 def forward_euler(z0, T, D, dt=1.0):
     z = np.zeros((T,D))
 
@@ -186,37 +99,4 @@ def simple_test_autograd():
     plt.plot(z0, 0, 'ko')
     plt.show()
 
-def hh_test_autograd():
-    dt = 0.01
-    T = 10.
-    t = np.arange(0,T,step=dt)
-    z0 = np.zeros(4)
-    z0[0] = -40
-    z0[1:] = 0.5
-    z_true, x_true = generate_test_data(T=len(t), z0=z0, dt=dt)
-
-    # Plot the data
-    # plt.plot(t, z_true[:,0], 'b')
-    # plt.plot(t, x_true[:,0], 'r')
-    # plt.show()
-
-    # Compute the gradient at a range of initial conditions
-    V0s = np.linspace(-30,-60, 10)
-    m0 = h0 = n0 = 0.5
-
-    #loss = lambda z0: l2_loss(z0, x_true)
-    loss = lambda z0: simulate_and_compute_loss(z0, x_true)
-    dloss_dz0 = ag.grad(loss)
-
-    dz0s = np.zeros((10, 4))
-    for i,V0 in enumerate(V0s):
-        z0i = np.array([V0, m0, h0, n0])
-        dz0s[i,:] = dloss_dz0(z0i)
-
-    plt.figure()
-    plt.plot(V0s, dz0s[:,0])
-    plt.plot(V0s, np.zeros_like(V0s))
-    plt.plot(z0[0], 0, 'ko')
-    plt.show()
-
-hh_test_autograd()
+simple_test_autograd()
