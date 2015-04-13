@@ -32,16 +32,24 @@ import matplotlib.pyplot as plt
 import autograd as ag
 from scipy.optimize import minimize
 
+# Define a few constants
+E_leak = -60.       # Reversal potentials
+E_na   = 50.
+E_k    = -77.
+g_leak = 0.3        # Conductances
+g_na   = 120
+g_k    = 36
 
+
+#############################################################
+# Dynamics functions
+#############################################################
 def voltage_dynamics(V, m, h, n, t, g, inpt):
-    # g_leak = 0.3
-    # g_na = 120
-    # g_k = 36
 
     # Compute the voltage drop through each channel
-    V_leak = V - (-60.)
-    V_na = m**3 * h * (V-50.)
-    V_k = n**4 * (V-(-77.))
+    V_leak = V - E_leak
+    V_na = m**3 * h * (V-E_na)
+    V_k = n**4 * (V-E_k)
 
     I_ionic = g[0] * V_leak
     I_ionic += g[1] * V_na
@@ -136,22 +144,18 @@ def simulate_and_compute_loss(v0, g, inpt, x, dt=1.0):
         h += dt * dhdt
         n += dt * dndt
 
-    return loss
+    return loss / T
 
-def generate_test_data(z0, g, inpt, T, dt=1.0):
-    z_true = forward_euler(z0, g, inpt, T, dt=dt)
-
-    sigma = 0.0
-    x_true = z_true + sigma * np.random.randn(*z_true.shape)
-
-    return z_true, x_true
-
+#############################################################
+# Optimization
+#############################################################
 def optimize_conductances():
     """
     Simple demo to optimize the conductance values for a given set of
     neural dynamics
     :return:
     """
+    # Timing
     dt = 0.01
     T = 2000     # number of time steps
     t = np.arange(T) * dt
@@ -162,29 +166,41 @@ def optimize_conductances():
     i_amp = 1000.
     inpt  = i_amp * (t > t_on)  * (t < t_off)
 
+    # True initial conditions
     z0_true = np.zeros(4)
     v0_true = -40
     z0_true[0] = v0_true
     z0_true[1:] = 0.5
-    g_true = np.array([0.2, 120., 36.])
-    z_true, x_true = generate_test_data(z0_true, g_true, inpt, T, dt=dt)
 
-    # Plot the data
-    plt.ion()
-    plt.plot(t, z_true[:,0], 'k', lw=2)
-    plt.plot(t, x_true[:,0], 'r')
-    # plt.show()
+    # True conductance values
+    g_true = np.array([0.2, 120., 36.])
+
+    # Simulate true data
+    z_true = forward_euler(z0_true, g_true, inpt, T, dt=dt)
+    sigma = 3.0
+    x_true = z_true + sigma * np.random.randn(*z_true.shape)
 
     # Initialize values to be optimized
     g_inf = 10 * np.ones(3)
     z_inf = forward_euler(z0_true, g_inf, inpt, T, dt=dt)
+
+    # Plot the voltage traces
+    plt.ion()
+    plt.figure()
+    plt.subplot(121)
+    plt.plot(t, z_true[:,0], 'k', lw=2)
+    plt.plot(t, x_true[:,0], 'r')
     ln = plt.plot(t, z_inf[:,0], 'b', lw=2)[0]
 
+    # Plot the conductances
+    plt.subplot(122)
+    plt.bar(np.arange(3), g_true, color='k', alpha=0.5)
+    bars = plt.bar(np.arange(3), g_inf, color='r', alpha=0.5)
     plt.pause(0.001)
 
     # Compute a gradient function as a function of g
     loss = lambda g: simulate_and_compute_loss(v0_true, g, inpt, x_true, dt=dt)
-    grad = ag.grad(loss)
+    dloss_dg = ag.grad(loss)
 
     # Make a callback to plot
     itr = [0]
@@ -193,12 +209,18 @@ def optimize_conductances():
         itr[0] = itr[0] + 1
         z_inf = forward_euler(z0_true, g_inf, inpt, T, dt=dt)
         ln.set_data(t, z_inf[:,0])
+        for i,bar in enumerate(bars):
+            bar.set_height(g_inf[i])
         plt.pause(0.001)
 
     # Optimize with scipy
     bnds = [(0, None)] * 3
-    x = minimize(loss, g_inf, jac=grad, bounds=bnds, callback=callback)
+    g_inf = minimize(loss, g_inf, jac=dloss_dg, bounds=bnds, callback=callback).x
 
-    print x
+    print "True g:"
+    print g_true
+    print ""
+    print "Inferred g: "
+    print g_inf
 
 optimize_conductances()
