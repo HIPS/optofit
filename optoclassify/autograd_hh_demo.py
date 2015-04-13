@@ -25,12 +25,11 @@ to a particular stimulus. The output should be a multinomial class
 label.
 
 """
-import numpy as np
-# np.seterr(all='raise')
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 
 import autograd as ag
+import autograd.numpy as np
 
 from hh_dynamics import *
 
@@ -67,7 +66,7 @@ def simulate_and_compute_loss(v0, g, inpt, x, dt=1.0):
 #############################################################
 # Optimization
 #############################################################
-def optimize_conductances():
+def optimize_conductances(use_autograd=False):
     """
     Simple demo to optimize the conductance values for a given set of
     neural dynamics
@@ -123,7 +122,6 @@ def optimize_conductances():
 
     # Compute a gradient function as a function of g
     loss = lambda g: simulate_and_compute_loss(v0_true, g, inpt, x_true, dt=dt)
-    dloss_dg = ag.grad(loss)
 
     # Make a callback to plot
     itr = [0]
@@ -136,9 +134,15 @@ def optimize_conductances():
             bar.set_height(g_inf[i])
         plt.pause(0.001)
 
-    # Optimize with scipy
+
+    # Optimize the conductance parameters with scipy
     bnds = [(0, None)] * 3
-    g_inf = minimize(loss, g_inf, jac=dloss_dg, bounds=bnds, callback=callback).x
+    if use_autograd:
+        dloss_dg = ag.grad(loss, return_function_value=True)
+        g_inf = minimize(dloss_dg, g_inf, jac=True, bounds=bnds, callback=callback).x
+    else:
+        # Just use finite differences and LBFGS
+        g_inf = minimize(loss, g_inf, bounds=bnds, callback=callback).x
 
     print "True g:"
     print g_true

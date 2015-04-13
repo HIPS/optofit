@@ -3,7 +3,8 @@ Simple simulation for the standard Hodgkin-Huxley model of a
 squid giant axon. It consists of two channels, a sodium and a
 delayed rectification potassium channel.
 """
-import numpy as np
+from scipy.integrate import odeint
+import autograd.numpy as np
 
 # Define a few constants
 E_leak = -60.       # Reversal potentials
@@ -33,7 +34,7 @@ def voltage_dynamics(V, m, h, n, t, g, inpt):
     dVdt = -1.0 * I_ionic
 
     # Add in driving current
-    dVdt += inpt[t]
+    dVdt += inpt(t)
 
     return dVdt
 
@@ -67,6 +68,19 @@ def potassium_dynamics(V, n, t):
 
     return dndt
 
+def joint_dynamics(z, g, inpt, t):
+    Vtm1 = z[0]
+    mtm1 = z[1]
+    htm1 = z[2]
+    ntm1 = z[3]
+
+    # Compute dynamics
+    dvdt = voltage_dynamics(Vtm1, mtm1, htm1, ntm1, t, g, inpt)
+    dmdt, dhdt = sodium_dynamics(Vtm1, mtm1, htm1, t)
+    dndt = potassium_dynamics(Vtm1, ntm1, t)
+
+    return np.array([dvdt, dmdt, dhdt, dndt])
+
 #############################################################
 # Simulation
 #############################################################
@@ -92,4 +106,11 @@ def forward_euler(z0, g, inpt, T, dt=1.0):
         z[t,2] = htm1 + dt*dhdt
         z[t,3] = ntm1 + dt*dndt
 
+    return z
+
+
+def implicit_euler(z0, g, inpt, ts):
+
+    f = lambda z, t: joint_dynamics(z, g, inpt, t)
+    z = odeint(f, z0, ts)
     return z
