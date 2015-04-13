@@ -191,11 +191,16 @@ def optimize_conductances():
     plt.plot(t, z_true[:,0], 'k', lw=2)
     plt.plot(t, x_true[:,0], 'r')
     ln = plt.plot(t, z_inf[:,0], 'b', lw=2)[0]
+    plt.xlabel("time [ms]")
+    plt.ylabel("V [mV]")
 
     # Plot the conductances
     plt.subplot(122)
     plt.bar(np.arange(3), g_true, color='k', alpha=0.5)
     bars = plt.bar(np.arange(3), g_inf, color='r', alpha=0.5)
+    plt.xticks(0.5 + np.arange(3), ["leak", "Na", "Kdr"])
+    plt.xlabel("Channel")
+    plt.ylabel("Conductance [mS]")
     plt.pause(0.001)
 
     # Compute a gradient function as a function of g
